@@ -13,10 +13,10 @@ export interface FileTransfer {
 }
 
 export interface WebRTCMessage {
-  type: 'verification-request' | 'verification-response' | 'verification-success' | 'verification-failed' | 
+  type: 'verification-request' | 'verification-response' | 'verification-success' | 'verification-failed' |
         'file-start' | 'file-chunk' | 'file-complete' | 'file-error' |
         'connection-status' | 'ping' | 'pong'
-  data?: any
+  data?: unknown
   verificationCode?: string
   fileId?: string
   fileName?: string

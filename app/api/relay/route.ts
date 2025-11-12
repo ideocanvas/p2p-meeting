@@ -7,7 +7,13 @@ const fileChunks = new Map<
   {
     files: Map<string, { // fileId
       chunks: Map<number, Uint8Array>;
-      metadata?: any;
+      metadata?: {
+        id: string;
+        name: string;
+        size: number;
+        type: string;
+        totalChunks: number;
+      };
       totalChunks?: number;
     }>;
     verificationCode?: string;
@@ -112,7 +118,7 @@ export async function GET(request: NextRequest) {
         availableChunks: data.chunks.size,
         totalChunks: data.totalChunks,
       }));
-      
+
       return NextResponse.json({
         files: filesMetadata,
         verificationCode: session.verificationCode,

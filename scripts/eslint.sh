@@ -6,4 +6,4 @@ source <(grep -v '^#' $DIR/../.env.local | grep -v '^$' | sed 's/^/export /')
 
 cd $DIR/..
 
-npx eslint src/ --ext .ts,.tsx
+npx eslint app/ hooks/ components/ lib/

@@ -46,7 +46,7 @@ function SendPageContent() {
             <Upload className="w-16 h-16 text-green-600 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Connect to Receiver</h2>
             <p className="text-gray-600 mb-8">
-              Enter the connection code shown on the receiver's device
+              Enter the connection code shown on the receiver&apos;s device
             </p>
 
             <div className="max-w-md mx-auto">

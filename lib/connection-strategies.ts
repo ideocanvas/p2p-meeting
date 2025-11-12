@@ -14,22 +14,23 @@ export const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
-  
-  // Open Relay Project (free TURN server)
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
+
+  // More reliable STUN servers
+  { urls: "stun:stun.voipbuster.com:3478" },
+  { urls: "stun:stun.voipstunt.com:3478" },
+
+  // Free TURN servers (may be unreliable)
   {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:numb.viagenie.ca",
+    username: "webrtc@live.com",
+    credential: "muazkh",
   },
   {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:turn.bistri.com:80",
+    username: "homeo",
+    credential: "homeo",
   },
 ];
 

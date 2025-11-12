@@ -85,7 +85,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
-    const response: any = {};
+    const response: {
+      answer?: RTCSessionDescriptionInit;
+      offer?: RTCSessionDescriptionInit;
+      iceCandidates?: RTCIceCandidateInit[];
+      candidateCount?: number;
+    } = {};
 
     if (role === "sender") {
       if (session.answer) response.answer = session.answer;

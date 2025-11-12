@@ -29,7 +29,7 @@ export default function ReceivePage() {
   const handleFileReceived = (file: Blob, metadata: { name: string; type: string }) => {
     setReceivedFiles((prev) => [...prev, { name: metadata.name, blob: file }]);
     toast.success(`File received: ${metadata.name}`);
-    
+
     // Auto-download
     const url = URL.createObjectURL(file);
     const a = document.createElement("a");
@@ -163,7 +163,7 @@ export default function ReceivePage() {
                         Verification Required
                       </h2>
                       <p className="text-gray-600 mb-6">
-                        Please enter the 6-digit verification code shown on the sender's device:
+                        Please enter the 6-digit verification code shown on the sender&apos;s device:
                       </p>
                       <div className="mb-6">
                         <input
@@ -186,7 +186,7 @@ export default function ReceivePage() {
                         Verify Connection
                       </button>
                       <p className="text-sm text-gray-600 mt-4">
-                        This ensures you're connecting to the right sender
+                        This ensures you&apos;re connecting to the right sender
                       </p>
                     </div>
                   </div>
