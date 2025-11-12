@@ -7,9 +7,14 @@ import QRCode from 'qrcode'
 interface QRCodeGeneratorProps {
   url: string
   size?: number
+  scanText?: string
 }
 
-export function QRCodeGenerator({ url, size = 256 }: QRCodeGeneratorProps) {
+export function QRCodeGenerator({
+  url,
+  size = 256,
+  scanText = 'Scan with any QR code scanner or camera app'
+}: QRCodeGeneratorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -42,7 +47,7 @@ export function QRCodeGenerator({ url, size = 256 }: QRCodeGeneratorProps) {
         />
       </div>
       <p className="text-xs text-gray-500 mt-2 text-center max-w-xs">
-        Scan with any QR code scanner or camera app
+        {scanText}
       </p>
     </div>
   )

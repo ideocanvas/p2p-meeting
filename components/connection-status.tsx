@@ -7,9 +7,37 @@ interface ConnectionStatusProps {
   state: 'waiting' | 'connecting' | 'verifying' | 'connected' | 'transferring' | 'disconnected'
   role: 'sender' | 'receiver'
   filesCount?: number
+  translations?: {
+    waitingForConnection: string
+    establishingConnection: string
+    waitingForVerification: string
+    pleaseVerifyConnection: string
+    connectedAndReady: string
+    transferringFiles: string
+    connectionLost: string
+    unknownStatus: string
+    receivingMode: string
+    sendingMode: string
+  }
 }
 
-export function ConnectionStatus({ state, role, filesCount = 0 }: ConnectionStatusProps) {
+export function ConnectionStatus({
+  state,
+  role,
+  filesCount = 0,
+  translations = {
+    waitingForConnection: 'Waiting for connection...',
+    establishingConnection: 'Establishing connection...',
+    waitingForVerification: 'Waiting for receiver verification...',
+    pleaseVerifyConnection: 'Please verify the connection',
+    connectedAndReady: 'Connected and ready',
+    transferringFiles: 'Transferring files...',
+    connectionLost: 'Connection lost',
+    unknownStatus: 'Unknown status',
+    receivingMode: 'Receiving mode',
+    sendingMode: 'Sending mode'
+  }
+}: ConnectionStatusProps) {
   const getStatusInfo = () => {
     switch (state) {
       case 'waiting':
@@ -17,51 +45,51 @@ export function ConnectionStatus({ state, role, filesCount = 0 }: ConnectionStat
           icon: Clock,
           color: 'text-blue-600',
           bgColor: 'bg-blue-100',
-          message: role === 'receiver' ? 'Waiting for connection...' : 'Connecting...'
+          message: role === 'receiver' ? translations.waitingForConnection : translations.establishingConnection
         }
       case 'connecting':
         return {
           icon: Wifi,
           color: 'text-orange-600',
           bgColor: 'bg-orange-100',
-          message: 'Establishing connection...'
+          message: translations.establishingConnection
         }
       case 'verifying':
         return {
           icon: Shield,
           color: 'text-yellow-600',
           bgColor: 'bg-yellow-100',
-          message: role === 'sender' 
-            ? 'Waiting for receiver verification...' 
-            : 'Please verify the connection'
+          message: role === 'sender'
+            ? translations.waitingForVerification
+            : translations.pleaseVerifyConnection
         }
       case 'connected':
         return {
           icon: CheckCircle,
           color: 'text-green-600',
           bgColor: 'bg-green-100',
-          message: 'Connected and ready'
+          message: translations.connectedAndReady
         }
       case 'transferring':
         return {
           icon: role === 'sender' ? Upload : Download,
           color: 'text-purple-600',
           bgColor: 'bg-purple-100',
-          message: `Transferring files... (${filesCount})`
+          message: `${translations.transferringFiles} (${filesCount})`
         }
       case 'disconnected':
         return {
           icon: WifiOff,
           color: 'text-red-600',
           bgColor: 'bg-red-100',
-          message: 'Connection lost'
+          message: translations.connectionLost
         }
       default:
         return {
           icon: AlertCircle,
           color: 'text-gray-600',
           bgColor: 'bg-gray-100',
-          message: 'Unknown status'
+          message: translations.unknownStatus
         }
     }
   }
@@ -77,7 +105,7 @@ export function ConnectionStatus({ state, role, filesCount = 0 }: ConnectionStat
         <div>
           <p className="font-medium text-gray-900">{message}</p>
           <p className="text-sm text-gray-600">
-            {role === 'receiver' ? 'Receiving mode' : 'Sending mode'}
+            {role === 'receiver' ? translations.receivingMode : translations.sendingMode}
           </p>
         </div>
         {state === 'connected' && (

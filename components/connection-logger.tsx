@@ -15,9 +15,16 @@ export interface LogEntry {
 interface ConnectionLoggerProps {
   logs: LogEntry[];
   maxHeight?: string;
+  title?: string;
+  waitingText?: string;
 }
 
-export function ConnectionLogger({ logs, maxHeight = "300px" }: ConnectionLoggerProps) {
+export function ConnectionLogger({
+  logs,
+  maxHeight = "300px",
+  title = "Connection Logs",
+  waitingText = "Waiting for connection..."
+}: ConnectionLoggerProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,7 +63,7 @@ export function ConnectionLogger({ logs, maxHeight = "300px" }: ConnectionLogger
   return (
     <Card className="p-4 bg-slate-50 dark:bg-slate-900">
       <h3 className="text-sm font-semibold mb-2 text-slate-700 dark:text-slate-300">
-        Connection Logs
+        {title}
       </h3>
       <ScrollArea
         className="rounded border bg-white dark:bg-slate-950"
@@ -65,7 +72,7 @@ export function ConnectionLogger({ logs, maxHeight = "300px" }: ConnectionLogger
         <div ref={scrollRef} className="p-3 space-y-1 font-mono text-xs">
           {logs.length === 0 ? (
             <div className="text-slate-400 dark:text-slate-500">
-              Waiting for connection...
+              {waitingText}
             </div>
           ) : (
             logs.map((log, index) => (
