@@ -54,7 +54,7 @@
   * {
     @apply border-border;
   }
-  
+
   body {
     @apply bg-background text-foreground;
   }
@@ -176,7 +176,7 @@
   .qr-container {
     padding: 1rem;
   }
-  
+
   .file-upload-area {
     padding: 2rem 1rem;
   }

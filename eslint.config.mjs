@@ -1,16 +1,111 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import js from "@eslint/js";
+import typescriptEslint from "@typescript-eslint/eslint-plugin";
+import typescriptParser from "@typescript-eslint/parser";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
+/** @type {import('eslint').Linter.Config[]} */
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  js.configs.recommended,
+  {
+    // Browser environment for frontend files
+    files: ["app/**/*.{js,jsx,ts,tsx}", "components/**/*.{js,jsx,ts,tsx}", "hooks/**/*.{js,jsx,ts,tsx}", "lib/**/*.{js,jsx,ts,tsx}"],
+    languageOptions: {
+      parser: typescriptParser,
+      globals: {
+        // Browser globals
+        window: "readonly",
+        document: "readonly",
+        navigator: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        Blob: "readonly",
+        File: "readonly",
+        React: "readonly",
+        // DOM element types
+        HTMLDivElement: "readonly",
+        HTMLCanvasElement: "readonly",
+        HTMLInputElement: "readonly",
+        HTMLParagraphElement: "readonly",
+        HTMLHeadingElement: "readonly",
+        // WebRTC globals
+        RTCPeerConnection: "readonly",
+        RTCDataChannel: "readonly",
+        RTCSessionDescription: "readonly",
+        RTCIceCandidate: "readonly",
+        RTCIceServer: "readonly",
+        RTCSessionDescriptionInit: "readonly",
+        RTCIceCandidateInit: "readonly",
+        RTCPeerConnectionState: "readonly",
+        RTCIceConnectionState: "readonly",
+        RTCSignalingState: "readonly",
+        RTCDataChannelState: "readonly",
+        // Timer globals
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        // Encoding globals
+        atob: "readonly",
+        btoa: "readonly",
+        // Node.js types
+        NodeJS: "readonly",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": typescriptEslint,
+    },
+    rules: {
+      ...typescriptEslint.configs.recommended.rules,
+      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "no-case-declarations": "off",
+    },
+  },
+  {
+    // Node.js environment for API routes
+    files: ["app/api/**/*.{js,jsx,ts,tsx}"],
+    languageOptions: {
+      parser: typescriptParser,
+      globals: {
+        // Node.js globals
+        console: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        atob: "readonly",
+        btoa: "readonly",
+        // WebRTC globals (for Cloudflare Workers)
+        RTCPeerConnection: "readonly",
+        RTCDataChannel: "readonly",
+        RTCSessionDescription: "readonly",
+        RTCIceCandidate: "readonly",
+        RTCIceServer: "readonly",
+        RTCSessionDescriptionInit: "readonly",
+        RTCIceCandidateInit: "readonly",
+        RTCPeerConnectionState: "readonly",
+        RTCIceConnectionState: "readonly",
+        RTCSignalingState: "readonly",
+        RTCDataChannelState: "readonly",
+        // Node.js types
+        NodeJS: "readonly",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": typescriptEslint,
+    },
+    rules: {
+      ...typescriptEslint.configs.recommended.rules,
+      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "no-case-declarations": "off",
+    },
+  },
+  {
+    ignores: [".next/", "dist/", "node_modules/"],
+  },
 ];
 
 export default eslintConfig;
