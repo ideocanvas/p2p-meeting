@@ -939,67 +939,130 @@ export function useWebRTC({
     if (!sessionId || strategyAttemptRef.current > 0) return;
 
     strategyAttemptRef.current = 1;
-    setConnectionState("connecting");
 
-    const tryStrategies = async () => {
+    if (role === "receiver") {
+      // For receiver: Start with passive server relay polling first
+      setConnectionState("waiting");
+      log("info", "Receiver ready - waiting for sender connection");
+
+      // Start server relay polling immediately (passive)
+      startServerRelayPolling();
+
+      // Only start active connection attempts after a delay or when there's activity
+      const startActiveConnections = async () => {
+        // Wait 5 seconds before trying active connections
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        // If still waiting for connection, try active strategies
+        if (connectionState === "waiting" || connectionState === "connecting") {
+          setConnectionState("connecting");
+          log("info", "Starting active connection strategies");
+
+          const peerJSSuccess = await tryPeerJSStrategy();
+          if (peerJSSuccess) {
+            log("success", "✓ PeerJS strategy successful");
+            return;
+          }
+
+          // Cleanup failed PeerJS attempt
+          if (peerRef.current) {
+            peerRef.current.destroy();
+            peerRef.current = null;
+          }
+
+          log("info", "Trying custom WebRTC...");
+          const customWebRTCSuccess = await tryCustomWebRTCStrategy();
+          if (customWebRTCSuccess) {
+            log("success", "✓ Custom WebRTC successful");
+            return;
+          }
+
+          // Cleanup failed WebRTC attempt
+          if (dataChannelRef.current) {
+            dataChannelRef.current.onclose = null;
+            dataChannelRef.current.close();
+            dataChannelRef.current = null;
+          }
+          if (rtcConnectionRef.current) {
+            rtcConnectionRef.current.close();
+            rtcConnectionRef.current = null;
+          }
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+
+          log("info", "Continuing with server relay polling");
+        }
+      };
+
+      startActiveConnections();
+    } else {
+      // For sender: Start all strategies immediately
+      setConnectionState("connecting");
       log("info", "Multi-strategy connection starting");
 
-      const peerJSSuccess = await tryPeerJSStrategy();
-      if (peerJSSuccess) {
-        log("success", "✓ PeerJS strategy successful");
-        return;
-      }
+      const tryStrategies = async () => {
+        const peerJSSuccess = await tryPeerJSStrategy();
+        if (peerJSSuccess) {
+          log("success", "✓ PeerJS strategy successful");
+          return;
+        }
 
-      // Cleanup failed PeerJS attempt
-      if (peerRef.current) {
-        peerRef.current.destroy();
-        peerRef.current = null;
-      }
+        // Cleanup failed PeerJS attempt
+        if (peerRef.current) {
+          peerRef.current.destroy();
+          peerRef.current = null;
+        }
 
-      log("info", "Trying custom WebRTC...");
-      const customWebRTCSuccess = await tryCustomWebRTCStrategy();
-      if (customWebRTCSuccess) {
-        log("success", "✓ Custom WebRTC successful");
-        return;
-      }
+        log("info", "Trying custom WebRTC...");
+        const customWebRTCSuccess = await tryCustomWebRTCStrategy();
+        if (customWebRTCSuccess) {
+          log("success", "✓ Custom WebRTC successful");
+          return;
+        }
 
-      // Cleanup failed WebRTC attempt
-      if (dataChannelRef.current) {
-        dataChannelRef.current.onclose = null;
-        dataChannelRef.current.close();
-        dataChannelRef.current = null;
-      }
-      if (rtcConnectionRef.current) {
-        rtcConnectionRef.current.close();
-        rtcConnectionRef.current = null;
-      }
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
+        // Cleanup failed WebRTC attempt
+        if (dataChannelRef.current) {
+          dataChannelRef.current.onclose = null;
+          dataChannelRef.current.close();
+          dataChannelRef.current = null;
+        }
+        if (rtcConnectionRef.current) {
+          rtcConnectionRef.current.close();
+          rtcConnectionRef.current = null;
+        }
+        if (pollingIntervalRef.current) {
+          clearInterval(pollingIntervalRef.current);
+          pollingIntervalRef.current = null;
+        }
 
-      log("info", "Falling back to server relay...");
-      const serverRelaySuccess = await tryServerRelayStrategy();
-      if (serverRelaySuccess) {
-        log("success", "✓ Server relay active");
-        return;
-      }
+        log("info", "Falling back to server relay...");
+        const serverRelaySuccess = await tryServerRelayStrategy();
+        if (serverRelaySuccess) {
+          log("success", "✓ Server relay active");
+          return;
+        }
 
-      log("error", "✗ All strategies failed");
-      setError("Unable to connect");
-      setConnectionState("disconnected");
-    };
+        log("error", "✗ All strategies failed");
+        setError("Unable to connect");
+        setConnectionState("disconnected");
+      };
 
-    tryStrategies();
+      tryStrategies();
+    }
 
     return cleanup;
   }, [
     sessionId,
+    role,
     tryPeerJSStrategy,
     tryCustomWebRTCStrategy,
     tryServerRelayStrategy,
     log,
     cleanup,
+    connectionState,
+    startServerRelayPolling,
   ]);
 
   const handleIncomingData = (data: unknown) => {
