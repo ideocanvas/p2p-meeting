@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "QuickShare P2P - Secure Peer-to-Peer File Sharing",
+    "title": "P2P Meeting - Secure Peer-to-Peer File Sharing",
     "description": "Share files directly between devices without storing data on servers. Fast, secure, and private P2P file transfer."
   },
   "common": {
@@ -31,7 +31,7 @@
     "waitingForConnection": "Waiting for connection..."
   },
   "home": {
-    "title": "QuickShare P2P",
+    "title": "P2P Meeting",
     "heroTitle": "Share Files Instantly",
     "heroDescription": "Direct peer-to-peer file sharing with no size limits. Your files never touch our servers - completely private and secure.",
     "receiveFiles": "Receive Files",

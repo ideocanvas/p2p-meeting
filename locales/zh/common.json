@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "title": "QuickShare P2P - 安全点对点文件共享",
+    "title": "P2P Meeting - 安全点对点文件共享",
     "description": "直接在设备之间共享文件，无需将数据存储在服务器上。快速、安全、私密的P2P文件传输。"
   },
   "common": {
@@ -31,7 +31,7 @@
     "waitingForConnection": "等待连接..."
   },
   "home": {
-    "title": "QuickShare P2P",
+    "title": "P2P Meeting",
     "heroTitle": "即时共享文件",
     "heroDescription": "直接点对点文件共享，无大小限制。您的文件永远不会接触我们的服务器 - 完全私密安全。",
     "receiveFiles": "接收文件",
