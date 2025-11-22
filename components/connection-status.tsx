@@ -1,12 +1,13 @@
 
 'use client'
 
-import { Wifi, WifiOff, CheckCircle, Clock, Upload, Download, AlertCircle, Shield } from 'lucide-react'
+import { Wifi, WifiOff, CheckCircle, Clock, Upload, Download, AlertCircle, Shield, Video, Users } from 'lucide-react'
 
 interface ConnectionStatusProps {
-  state: 'waiting' | 'connecting' | 'verifying' | 'connected' | 'transferring' | 'disconnected'
-  role: 'sender' | 'receiver'
+  state: 'waiting' | 'connecting' | 'verifying' | 'connected' | 'transferring' | 'disconnected' | 'active'
+  role: 'sender' | 'receiver' | 'host' | 'participant'
   filesCount?: number
+  participantsCount?: number
   translations?: {
     waitingForConnection: string
     establishingConnection: string
@@ -18,6 +19,9 @@ interface ConnectionStatusProps {
     unknownStatus: string
     receivingMode: string
     sendingMode: string
+    hostingMode: string
+    joiningMode: string
+    meetingInProgress: string
   }
 }
 
@@ -25,6 +29,7 @@ export function ConnectionStatus({
   state,
   role,
   filesCount = 0,
+  participantsCount = 0,
   translations = {
     waitingForConnection: 'Waiting for connection...',
     establishingConnection: 'Establishing connection...',
@@ -35,7 +40,10 @@ export function ConnectionStatus({
     connectionLost: 'Connection lost',
     unknownStatus: 'Unknown status',
     receivingMode: 'Receiving mode',
-    sendingMode: 'Sending mode'
+    sendingMode: 'Sending mode',
+    hostingMode: 'Hosting mode',
+    joiningMode: 'Joining mode',
+    meetingInProgress: 'Meeting in progress'
   }
 }: ConnectionStatusProps) {
   const getStatusInfo = () => {
@@ -45,7 +53,7 @@ export function ConnectionStatus({
           icon: Clock,
           color: 'text-blue-600',
           bgColor: 'bg-blue-100',
-          message: role === 'receiver' ? translations.waitingForConnection : translations.establishingConnection
+          message: role === 'receiver' || role === 'host' ? translations.waitingForConnection : translations.establishingConnection
         }
       case 'connecting':
         return {
@@ -59,7 +67,7 @@ export function ConnectionStatus({
           icon: Shield,
           color: 'text-yellow-600',
           bgColor: 'bg-yellow-100',
-          message: role === 'sender'
+          message: role === 'sender' || role === 'host'
             ? translations.waitingForVerification
             : translations.pleaseVerifyConnection
         }
@@ -69,6 +77,13 @@ export function ConnectionStatus({
           color: 'text-green-600',
           bgColor: 'bg-green-100',
           message: translations.connectedAndReady
+        }
+      case 'active':
+        return {
+          icon: Video,
+          color: 'text-green-600',
+          bgColor: 'bg-green-100',
+          message: `${translations.meetingInProgress} (${participantsCount})`
         }
       case 'transferring':
         return {
@@ -105,11 +120,20 @@ export function ConnectionStatus({
         <div>
           <p className="font-medium text-gray-900">{message}</p>
           <p className="text-sm text-gray-600">
-            {role === 'receiver' ? translations.receivingMode : translations.sendingMode}
+            {role === 'receiver' ? translations.receivingMode :
+             role === 'host' ? translations.hostingMode :
+             role === 'participant' ? translations.joiningMode :
+             translations.sendingMode}
           </p>
         </div>
-        {state === 'connected' && (
-          <div className="ml-auto">
+        {(state === 'connected' || state === 'active') && (
+          <div className="ml-auto flex items-center space-x-2">
+            {state === 'active' && participantsCount > 0 && (
+              <div className="flex items-center space-x-1 text-gray-600">
+                <Users className="w-4 h-4" />
+                <span className="text-sm">{participantsCount}</span>
+              </div>
+            )}
             <div className={`w-2 h-2 rounded-full bg-green-400 animate-pulse`} />
           </div>
         )}

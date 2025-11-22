@@ -1,13 +1,13 @@
 # P2P Meeting
 
-A secure peer-to-peer file sharing application that allows direct file transfers between devices without storing data on servers.
+A secure peer-to-peer video meeting application that allows direct video and audio communication between multiple participants without storing data on servers.
 
 ## Features
 
-- **100% Private**: Files are transferred directly between devices. Nothing stored on our servers.
-- **No Size Limits**: Send files of any size. Large videos, documents, archives - anything goes.
-- **Easy Connection**: Just scan a QR code to connect. No accounts, no apps to download.
-- **Secure Transfer**: All transfers are encrypted and secure.
+- **100% Private**: Video and audio are streamed directly between participants. Nothing stored on our servers.
+- **Multi-Participant Support**: Connect with multiple people in a single meeting room.
+- **Easy Connection**: Just scan a QR code or share a link to join a meeting. No accounts, no apps to download.
+- **Secure Communication**: All video and audio streams are encrypted and secure.
 - **Cross-platform**: Works on any modern browser with WebRTC support.
 
 ## Technology Stack
@@ -88,17 +88,17 @@ pnpm run deploy
 
 ## How It Works
 
-1. **Receiver**: Generates a QR code and connection code
-2. **Sender**: Scans the QR code or enters the connection code
-3. **Verification**: Both parties verify the connection with a 6-digit code
-4. **Transfer**: Files are transferred directly using WebRTC
+1. **Host**: Creates a meeting room and gets a QR code and meeting link
+2. **Participants**: Scan the QR code or click the meeting link to join
+3. **Verification**: Host verifies participants with a 6-digit code (optional)
+4. **Meeting**: Video and audio are streamed directly between all participants using WebRTC
 
 ## Security
 
-- All connections use WebRTC with encryption
-- Verification codes ensure you're connecting to the right person
-- No files are stored on any servers
-- Connections timeout after 15 minutes
+- All connections use WebRTC with end-to-end encryption
+- Meeting codes ensure only invited participants can join
+- No video or audio data is stored on any servers
+- Meeting rooms timeout after 2 hours
 
 ## Contributing
 

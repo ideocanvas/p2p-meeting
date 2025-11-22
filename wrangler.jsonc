@@ -12,8 +12,8 @@
 	},
 	"kv_namespaces": [
 		{
-			"binding": "SHORT_CODES",
-			"id": "999dd5cc2ebb4ea3ade04182cb89b89a",
+			"binding": "MEETING_ROOMS",
+			"id": "937c9cfd13e94555b473d8fa7d995e5e",
 			"remote": true
 		}
 	]

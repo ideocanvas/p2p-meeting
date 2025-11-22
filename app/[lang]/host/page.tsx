@@ -1,19 +1,18 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Video, Shield, Clock, Copy, Users } from "lucide-react";
+import { ArrowLeft, Video, VideoOff, Mic, Phone, Shield, Clock, Copy, Users } from "lucide-react";
 import Link from "next/link";
 import { QRCodeGenerator } from "@/components/qr-code-generator";
 import { ConnectionStatus } from "@/components/connection-status";
 import { ConnectionLogger, LogEntry } from "@/components/connection-logger";
 import { toast } from "sonner";
 import MeetingManager, { ConnectionState, Participant } from "@/services/meeting-manager";
-import { IMediaStream } from "@/lib/types";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslations } from "@/lib/client-i18n";
 import BuyMeACoffee from "@/components/BuyMeACoffee";
 
-export default function HostPage({ params }: { params: Promise<{ lang: string }> }) {
+function HostPageContent({ params }: { params: Promise<{ lang: string }> }) {
   const [lang, setLang] = useState<"en" | "zh">("en");
   const [t, setT] = useState(() => getTranslations("en"));
   
@@ -37,7 +36,7 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
   const [verificationCode, setVerificationCode] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [localStream, setLocalStream] = useState<IMediaStream | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const handleLog = (log: LogEntry) => {
     setLogs((prev) => [...prev, log]);
@@ -84,15 +83,24 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
       onLog: handleLog,
     });
 
-    // Initialize meeting as host
-    meetingManager.createMeeting().then((id) => {
-      console.log("Meeting created with room ID:", id);
-      setRoomId(id);
-      registerShortCode(id);
-    }).catch((err) => {
-      console.error("Failed to create meeting:", err);
-      setError(t("host.connectionFailed"));
-    });
+    // Initialize meeting as host with media
+    const initializeMeeting = async () => {
+      try {
+        // Enable media first
+        await meetingManager.enableMedia();
+        
+        // Create meeting
+        const id = await meetingManager.createMeeting();
+        console.log("Meeting created with room ID:", id);
+        setRoomId(id);
+        registerShortCode(id);
+      } catch (err) {
+        console.error("Failed to create meeting:", err);
+        setError(t("host.connectionFailed"));
+      }
+    };
+    
+    initializeMeeting();
 
     return () => {
       unsubscribe();
@@ -313,6 +321,93 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
                 {(connectionState === "connected" || connectionState === "active") && (
                   <div className="mt-6">
                     <h3 className="text-lg font-semibold mb-4">{t("host.meetingInProgress")}</h3>
+                    
+                    {/* Video Grid for meeting */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      {/* Local video */}
+                      <div className="bg-gray-900 rounded-lg p-2">
+                        <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
+                          {localStream ? (
+                            <video
+                              autoPlay
+                              muted
+                              playsInline
+                              className="w-full h-full object-cover rounded-lg"
+                              ref={(videoElement) => {
+                                if (videoElement && localStream) {
+                                  videoElement.srcObject = localStream;
+                                }
+                              }}
+                            />
+                          ) : (
+                            <div className="text-center">
+                              <VideoOff className="w-16 h-16 text-gray-600 mx-auto mb-2" />
+                              <p className="text-gray-400">Your camera is off</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-center mt-2">
+                          <p className="text-white text-sm">You (Host)</p>
+                        </div>
+                      </div>
+                      
+                      {/* Remote videos */}
+                      {participants.map((participant) => (
+                        <div key={participant.id} className="bg-gray-900 rounded-lg p-2">
+                          <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
+                            {participant.stream ? (
+                              <video
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-cover rounded-lg"
+                                ref={(videoElement) => {
+                                  if (videoElement && participant.stream) {
+                                    videoElement.srcObject = participant.stream;
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <div className="text-center">
+                                <VideoOff className="w-16 h-16 text-gray-600 mx-auto mb-2" />
+                                <p className="text-gray-400">{participant.name}'s camera off</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-center mt-2">
+                            <p className="text-white text-sm">{participant.name}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Meeting controls */}
+                    <div className="flex justify-center space-x-4 mb-6">
+                      <button
+                        onClick={() => {
+                          const meetingManager = MeetingManager.getInstance();
+                          meetingManager.toggleAudio();
+                        }}
+                        className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
+                      >
+                        <Mic className="w-6 h-6" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          const meetingManager = MeetingManager.getInstance();
+                          meetingManager.toggleVideo();
+                        }}
+                        className="p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors"
+                      >
+                        <Video className="w-6 h-6" />
+                      </button>
+                      <button
+                        onClick={() => window.location.reload()}
+                        className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors"
+                      >
+                        <Phone className="w-6 h-6 transform rotate-135" />
+                      </button>
+                    </div>
+
                     {participants.length === 0 ? (
                       <div className="text-center py-8 text-gray-500">
                         <p>{t("host.waitingForParticipants")}</p>
@@ -396,6 +491,17 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
         
         <BuyMeACoffee language={lang === "zh" ? "zh-TW" : "en"} />
       </main>
+    </div>
+  );
+}
+
+export default async function HostPage({ params }: { params: Promise<{ lang: string }> }) {
+  const { lang } = await params;
+  const validLang = (lang === "zh" ? "zh" : "en") as "en" | "zh";
+
+  return (
+    <div>
+      <HostPageContent params={Promise.resolve({ lang: validLang })} />
     </div>
   );
 }

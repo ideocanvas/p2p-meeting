@@ -1,7 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextRequest, NextResponse } from "next/server";
 
-// Cloudflare KV binding for short code mappings
+// Cloudflare KV binding for meeting room mappings
 interface KVNamespace {
   get(key: string): Promise<string | null>;
   put(
@@ -27,21 +27,19 @@ function generateShortCode(): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { peerId, roomId } = body;
+    const { roomId } = body;
 
-    const id = roomId || peerId;
-
-    if (!id) {
-      return NextResponse.json({ error: "Room ID or Peer ID required" }, { status: 400 });
+    if (!roomId) {
+      return NextResponse.json({ error: "Room ID required" }, { status: 400 });
     }
 
     // Get the Cloudflare context
     const { env } = getCloudflareContext();
 
     // @ts-expect-error - Cloudflare KV binding
-    const SHORT_CODES: KVNamespace = env.SHORT_CODES;
+    const MEETING_CODES: KVNamespace = env.MEETING_CODES || env.SHORT_CODES;
 
-    if (!SHORT_CODES) {
+    if (!MEETING_CODES) {
       return NextResponse.json(
         { error: "KV storage not available" },
         { status: 500 }
@@ -55,11 +53,11 @@ export async function POST(request: NextRequest) {
 
     do {
       shortCode = generateShortCode();
-      const existing = await SHORT_CODES.get(shortCode);
+      const existing = await MEETING_CODES.get(shortCode);
 
       if (!existing) {
         // Code is available, store it
-        await SHORT_CODES.put(shortCode, id, { expirationTtl: TTL });
+        await MEETING_CODES.put(shortCode, roomId, { expirationTtl: TTL });
         break;
       }
 
@@ -68,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     if (attempts >= maxAttempts) {
       return NextResponse.json(
-        { error: "Failed to generate unique short code" },
+        { error: "Failed to generate unique meeting code" },
         { status: 500 }
       );
     }
@@ -76,12 +74,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       shortCode,
+      roomId,
       expiresIn: TTL,
     });
   } catch (error) {
-    console.error("Short code registration error:", error);
+    console.error("Meeting code registration error:", error);
     return NextResponse.json(
-      { error: "Failed to register short code" },
+      { error: "Failed to register meeting code" },
       { status: 500 }
     );
   }
@@ -94,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     if (!shortCode) {
       return NextResponse.json(
-        { error: "Short code required" },
+        { error: "Meeting code required" },
         { status: 400 }
       );
     }
@@ -103,35 +102,34 @@ export async function GET(request: NextRequest) {
     const { env } = getCloudflareContext();
 
     // @ts-expect-error - Cloudflare KV binding
-    const SHORT_CODES: KVNamespace = env.SHORT_CODES;
+    const MEETING_CODES: KVNamespace = env.MEETING_CODES || env.SHORT_CODES;
 
-    if (!SHORT_CODES) {
+    if (!MEETING_CODES) {
       return NextResponse.json(
         { error: "KV storage not available" },
         { status: 500 }
       );
     }
 
-    // Lookup ID from short code (could be peerId or roomId)
-    const id = await SHORT_CODES.get(shortCode);
+    // Lookup room ID from short code
+    const roomId = await MEETING_CODES.get(shortCode);
 
-    if (!id) {
+    if (!roomId) {
       return NextResponse.json(
-        { error: "Short code not found or expired" },
+        { error: "Meeting code not found or expired" },
         { status: 404 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      peerId: id, // Keep as peerId for backward compatibility
-      roomId: id, // Add roomId for meeting functionality
+      roomId,
       shortCode,
     });
   } catch (error) {
-    console.error("Short code lookup error:", error);
+    console.error("Meeting code lookup error:", error);
     return NextResponse.json(
-      { error: "Failed to lookup short code" },
+      { error: "Failed to lookup meeting code" },
       { status: 500 }
     );
   }
@@ -144,7 +142,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!shortCode) {
       return NextResponse.json(
-        { error: "Short code required" },
+        { error: "Meeting code required" },
         { status: 400 }
       );
     }
@@ -153,22 +151,22 @@ export async function DELETE(request: NextRequest) {
     const { env } = getCloudflareContext();
 
     // @ts-expect-error - Cloudflare KV binding
-    const SHORT_CODES: KVNamespace = env.SHORT_CODES;
+    const MEETING_CODES: KVNamespace = env.MEETING_CODES || env.SHORT_CODES;
 
-    if (!SHORT_CODES) {
+    if (!MEETING_CODES) {
       return NextResponse.json(
         { error: "KV storage not available" },
         { status: 500 }
       );
     }
 
-    await SHORT_CODES.delete(shortCode);
+    await MEETING_CODES.delete(shortCode);
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Short code deletion error:", error);
+    console.error("Meeting code deletion error:", error);
     return NextResponse.json(
-      { error: "Failed to delete short code" },
+      { error: "Failed to delete meeting code" },
       { status: 500 }
     );
   }

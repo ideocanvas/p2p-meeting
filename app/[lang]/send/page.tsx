@@ -2,135 +2,168 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useParams } from "next/navigation";
-import { ArrowLeft, Upload } from "lucide-react";
+import { ArrowLeft, Video, Phone, Mic, MicOff, VideoOff } from "lucide-react";
 import Link from "next/link";
 import { ConnectionStatus } from "@/components/connection-status";
 import { ConnectionLogger, LogEntry } from "@/components/connection-logger";
-import PeerManager, { ConnectionState, FileTransfer } from "@/services/peer-manager";
+import MeetingManager, { ConnectionState, Participant } from "@/services/meeting-manager";
+import { IMediaStream } from "@/lib/types";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslations } from "@/lib/client-i18n";
 import BuyMeACoffee from "@/components/BuyMeACoffee";
 
-function SendPageContent() {
+function JoinPageContent() {
   const searchParams = useSearchParams();
   const params = useParams();
   const lang = (params.lang === "zh" ? "zh" : "en") as "en" | "zh";
   const t = getTranslations(lang);
   
-  const sessionId = searchParams?.get("session");
+  const roomId = searchParams?.get("room");
   const [manualCode, setManualCode] = useState<string>("");
+  const [participantName, setParticipantName] = useState<string>("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [connectionState, setConnectionState] = useState<ConnectionState>("waiting");
-  const [files, setFiles] = useState<FileTransfer[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
+  const [localStream, setLocalStream] = useState<IMediaStream | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
   const handleLog = (log: LogEntry) => {
     setLogs((prev) => [...prev, log]);
   };
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!roomId) return;
 
-    const peerManager = PeerManager.getInstance();
+    const meetingManager = MeetingManager.getInstance();
     
     // Subscribe to state changes
-    const unsubscribe = peerManager.subscribe({
+    const unsubscribe = meetingManager.subscribe({
       onConnectionStateChange: (state: ConnectionState) => {
         setConnectionState(state);
         
-        // Update other state from peer manager
-        const managerState = peerManager.getState();
-        setFiles(managerState.files);
+        // Update other state from meeting manager
+        const managerState = meetingManager.getState();
+        setParticipants(managerState.participants);
         setError(managerState.error);
         setVerificationCode(managerState.verificationCode);
         setIsVerified(managerState.isVerified);
+        setLocalStream(managerState.localStream);
       },
       onLog: handleLog,
     });
 
-    const connectWithShortCode = async () => {
+    const joinMeeting = async () => {
       try {
-        // Check if sessionId is a short code (6 characters alphanumeric)
-        if (sessionId.length === 6 && /^[A-Z0-9]{6}$/i.test(sessionId)) {
-          // Lookup peer ID from short code
-          handleLog({ timestamp: new Date(), level: "info", message: "Looking up peer ID from short code", details: `Code: ${sessionId}` });
-          const response = await fetch(`/api/codes?shortCode=${sessionId}`);
+        // Check if roomId is a short code (6 characters alphanumeric)
+        if (roomId.length === 6 && /^[A-Z0-9]{6}$/i.test(roomId)) {
+          // Lookup room ID from short code
+          handleLog({ timestamp: new Date(), level: "info", message: "Looking up room ID from short code", details: `Code: ${roomId}` });
+          const response = await fetch(`/api/meetings?shortCode=${roomId}`);
           const data = await response.json();
           
           if (data.success) {
-            handleLog({ timestamp: new Date(), level: "success", message: "Found peer ID from short code", details: `Peer ID: ${data.peerId}` });
-            // Connect using the full peer ID
-            await peerManager.connect("sender", data.peerId);
+            handleLog({ timestamp: new Date(), level: "success", message: "Found room ID from short code", details: `Room ID: ${data.roomId}` });
+            // Join using the full room ID
+            await meetingManager.joinMeeting(data.roomId, participantName || "Anonymous");
           } else {
             handleLog({ timestamp: new Date(), level: "error", message: "Failed to lookup short code", details: data.error });
-            setError("Invalid connection code - please check and try again");
+            setError("Invalid meeting code - please check and try again");
             return;
           }
         } else {
-          // Assume it's a full peer ID (backward compatibility)
-          handleLog({ timestamp: new Date(), level: "info", message: "Using direct peer ID connection" });
-          await peerManager.connect("sender", sessionId);
+          // Assume it's a full room ID (backward compatibility)
+          handleLog({ timestamp: new Date(), level: "info", message: "Using direct room ID connection" });
+          await meetingManager.joinMeeting(roomId, participantName || "Anonymous");
         }
       } catch (err) {
-        console.error("Failed to connect as sender:", err);
-        setError("Failed to connect to receiver");
+        console.error("Failed to join meeting:", err);
+        setError("Failed to join meeting");
       }
     };
 
-    connectWithShortCode();
+    // Enable media first
+    meetingManager.enableMedia().then(() => {
+      joinMeeting();
+    }).catch((err) => {
+      console.error("Failed to enable media:", err);
+      setError("Failed to enable camera and microphone");
+    });
 
     return () => {
       unsubscribe();
     };
-  }, [sessionId]);
+  }, [roomId, participantName]);
 
   const handleManualCodeSubmit = () => {
-    if (manualCode.trim()) {
-      window.location.href = `/${lang}/send?session=${manualCode.toLowerCase()}`;
+    if (manualCode.trim() && participantName.trim()) {
+      window.location.href = `/${lang}/join?room=${manualCode.toLowerCase()}&name=${encodeURIComponent(participantName)}`;
     }
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = event.target.files;
-    if (fileList && fileList.length > 0) {
-      const filesArray = Array.from(fileList);
-      const peerManager = PeerManager.getInstance();
-      await peerManager.sendFiles(filesArray);
-    }
+  const handleToggleAudio = async () => {
+    const meetingManager = MeetingManager.getInstance();
+    await meetingManager.toggleAudio();
+    setIsAudioEnabled(!isAudioEnabled);
   };
 
-  if (!sessionId) {
+  const handleToggleVideo = async () => {
+    const meetingManager = MeetingManager.getInstance();
+    await meetingManager.toggleVideo();
+    setIsVideoEnabled(!isVideoEnabled);
+  };
+
+  const handleLeaveMeeting = () => {
+    const meetingManager = MeetingManager.getInstance();
+    meetingManager.leaveMeeting();
+    window.location.href = `/${lang}`;
+  };
+
+  if (!roomId) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <div className="text-center">
-            <Upload className="w-16 h-16 text-green-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">{t("send.connectToReceiver")}</h2>
+            <Video className="w-16 h-16 text-green-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">{t("join.connectToHost")}</h2>
             <p className="text-gray-600 mb-8">
-              {t("send.enterConnectionCode")}
+              {t("join.enterMeetingCode")}
             </p>
 
             <div className="max-w-md mx-auto">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Your Name
+                </label>
+                <input
+                  type="text"
+                  value={participantName}
+                  onChange={(e) => setParticipantName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="w-full px-4 py-3 text-center border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                />
+              </div>
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {t("send.connectionCode")}
+                  {t("join.meetingCode")}
                 </label>
                 <input
                   type="text"
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value.replace(/[^a-zA-Z0-9]/g, ""))}
-                  placeholder={t("send.enterCodeFromReceiver")}
+                  placeholder={t("join.enterCodeFromHost")}
                   className="w-full px-4 py-3 text-center text-xl font-mono uppercase border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
               <button
                 onClick={handleManualCodeSubmit}
-                disabled={!manualCode.trim()}
+                disabled={!manualCode.trim() || !participantName.trim()}
                 className="w-full bg-green-600 text-white px-6 py-3 rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-green-700 transition-colors mb-4"
               >
-                {t("send.connect")}
+                {t("join.connect")}
               </button>
 
               <div className="relative my-6">
@@ -158,7 +191,7 @@ function SendPageContent() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2">
-        <ConnectionStatus state={connectionState} role="sender" filesCount={files.length} />
+        <ConnectionStatus state={connectionState} role="participant" participantsCount={participants.length} />
 
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -174,8 +207,8 @@ function SendPageContent() {
         {connectionState === "connecting" && (
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">{t("send.connectingToReceiver")}</h2>
-            <p className="text-gray-600">{t("send.establishingConnection")}</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">{t("join.connectingToHost")}</h2>
+            <p className="text-gray-600">{t("join.establishingConnection")}</p>
           </div>
         )}
 
@@ -185,7 +218,7 @@ function SendPageContent() {
             <div className="max-w-md mx-auto bg-yellow-50 border-2 border-yellow-300 rounded-lg p-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">{t("common.verificationRequired")}</h2>
               <p className="text-gray-600 mb-6">
-                {t("send.shareCodeForVerification")}
+                {t("join.shareCodeForVerification")}
               </p>
               <div className="bg-white border-4 border-yellow-400 rounded-lg p-6 mb-4">
                 <div className="text-4xl font-bold text-gray-900 tracking-widest">
@@ -199,62 +232,99 @@ function SendPageContent() {
               {verificationCode && (
                 <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-sm text-green-700">
-                    ✅ {t("send.verificationCodeSent")}
+                    ✅ {t("join.verificationCodeSent")}
                   </p>
                 </div>
               )}
               <p className="text-sm text-gray-600">
-                {t("send.receiverMustEnterCode")}
+                {t("join.hostMustApprove")}
               </p>
             </div>
           </div>
         )}
 
-        {/* Connected and ready to send */}
-        {(connectionState === "connected" || connectionState === "transferring") && (
+        {/* Connected and in meeting */}
+        {(connectionState === "connected" || connectionState === "active") && (
           <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4">{t("send.sendFiles")}</h3>
-
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-green-500 transition-colors">
-              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <label className="cursor-pointer">
-                <span className="text-green-600 font-semibold hover:text-green-700">
-                  {t("send.clickToSelectFiles")}
-                </span>
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  disabled={connectionState === "transferring"}
-                />
-              </label>
-              <p className="text-sm text-gray-500 mt-2">{t("send.multipleFilesSupported")}</p>
+            <h3 className="text-lg font-semibold mb-4">Meeting in Progress</h3>
+            
+            {/* Video preview area */}
+            <div className="bg-gray-900 rounded-lg p-4 mb-4">
+              <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
+                {localStream ? (
+                  <video
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover rounded-lg"
+                    ref={(videoElement) => {
+                      if (videoElement && localStream) {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        (videoElement as any).srcObject = localStream;
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="text-center">
+                    <VideoOff className="w-16 h-16 text-gray-600 mx-auto mb-2" />
+                    <p className="text-gray-400">Camera off</p>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {files.length > 0 && (
-              <div className="mt-6 space-y-3">
-                {files.map((file) => (
-                  <div key={file.id} className="border rounded-lg p-4 bg-gray-50">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-medium truncate">{file.name}</span>
-                      <span className="text-sm text-gray-500">
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
+            {/* Meeting controls */}
+            <div className="flex justify-center space-x-4 mb-6">
+              <button
+                onClick={handleToggleAudio}
+                className={`p-4 rounded-full transition-colors ${
+                  isAudioEnabled
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+              >
+                {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+              </button>
+              <button
+                onClick={handleToggleVideo}
+                className={`p-4 rounded-full transition-colors ${
+                  isVideoEnabled
+                    ? "bg-blue-600 hover:bg-blue-700 text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+              >
+                {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+              </button>
+              <button
+                onClick={handleLeaveMeeting}
+                className="p-4 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors"
+              >
+                <Phone className="w-6 h-6 transform rotate-135" />
+              </button>
+            </div>
+
+            {/* Participants list */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h4 className="font-semibold mb-3">Participants ({participants.length + 1})</h4>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-3 p-2 bg-white rounded">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 font-semibold text-sm">You</span>
+                  </div>
+                  <span className="font-medium">{participantName || "You"}</span>
+                </div>
+                {participants.map((participant) => (
+                  <div key={participant.id} className="flex items-center space-x-3 p-2 bg-white rounded">
+                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                      <span className="text-gray-600 font-semibold text-sm">
+                        {participant.name.charAt(0).toUpperCase()}
                       </span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-green-600 h-2 rounded-full transition-all"
-                        style={{ width: `${file.progress}%` }}
-                      />
-                    </div>
-                    <div className="mt-1 text-xs text-gray-600">
-                      {file.status === "completed" ? `✓ ${t("common.sent")}` : `${Math.round(file.progress)}%`}
-                    </div>
+                    <span className="font-medium">{participant.name}</span>
                   </div>
                 ))}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -264,7 +334,7 @@ function SendPageContent() {
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">{t("common.connectionClosed")}</h2>
               <p className="text-gray-600 mb-8">
-                {t("send.connectionTerminated")}
+                {t("join.connectionTerminated")}
               </p>
             </div>
             <Link
@@ -284,7 +354,7 @@ function SendPageContent() {
   );
 }
 
-export default async function SendPage({ params }: { params: Promise<{ lang: string }> }) {
+export default async function JoinPage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params;
   const validLang = (lang === "zh" ? "zh" : "en") as "en" | "zh";
   const t = getTranslations(validLang);
@@ -301,7 +371,7 @@ export default async function SendPage({ params }: { params: Promise<{ lang: str
               <ArrowLeft className="w-5 h-5" />
               <span>{t("common.backToHome")}</span>
             </Link>
-            <h1 className="text-xl font-bold text-gray-900">{t("send.title")}</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t("join.title")}</h1>
             <LanguageSwitcher currentLocale={validLang} />
           </div>
         </div>
@@ -309,7 +379,7 @@ export default async function SendPage({ params }: { params: Promise<{ lang: str
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         <Suspense fallback={<div>{t("common.loading")}</div>}>
-          <SendPageContent />
+          <JoinPageContent />
         </Suspense>
         
         <BuyMeACoffee language={validLang === "zh" ? "zh-TW" : "en"} />

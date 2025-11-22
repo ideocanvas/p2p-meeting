@@ -27,6 +27,18 @@ const eslintConfig = [
         HTMLInputElement: "readonly",
         HTMLParagraphElement: "readonly",
         HTMLHeadingElement: "readonly",
+        HTMLTextAreaElement: "readonly",
+        HTMLButtonElement: "readonly",
+        HTMLSpanElement: "readonly",
+        HTMLFormElement: "readonly",
+        HTMLLabelElement: "readonly",
+        HTMLVideoElement: "readonly",
+        HTMLAudioElement: "readonly",
+        // Media types
+        MediaStream: "readonly",
+        MediaStreamTrack: "readonly",
+        // URL utilities
+        URLSearchParams: "readonly",
         // WebRTC globals
         RTCPeerConnection: "readonly",
         RTCDataChannel: "readonly",
@@ -73,6 +85,7 @@ const eslintConfig = [
         console: "readonly",
         fetch: "readonly",
         URL: "readonly",
+        URLSearchParams: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         setInterval: "readonly",

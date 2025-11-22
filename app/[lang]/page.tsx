@@ -1,4 +1,4 @@
-import { ArrowUpDown, Download, Upload, Shield, Zap, Users } from 'lucide-react'
+import { Video, Users, Shield, Zap, Phone } from 'lucide-react'
 import Link from 'next/link'
 import { getDictionary, Locale } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
@@ -15,7 +15,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <ArrowUpDown className="w-8 h-8 text-blue-600" />
+              <Video className="w-8 h-8 text-blue-600" />
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-green-600 bg-clip-text text-transparent">
                 {dict.home.title}
               </h1>
@@ -38,37 +38,37 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
 
         {/* Action Cards */}
         <div className="grid md:grid-cols-2 gap-8 mb-16">
-          {/* Receive Files Card */}
-          <Link href={`/${lang}/receive`} className="group">
+          {/* Create Meeting Card */}
+          <Link href={`/${lang}/create`} className="group">
             <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 border border-gray-200 hover:border-blue-300 transform hover:-translate-y-1">
               <div className="text-center">
                 <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-blue-200 transition-colors">
-                  <Download className="w-8 h-8 text-blue-600" />
+                  <Video className="w-8 h-8 text-blue-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">{dict.home.receiveFiles}</h3>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">{dict.home.createMeeting}</h3>
                 <p className="text-gray-600 mb-6">
-                  {dict.home.receiveDescription}
+                  {dict.home.createDescription}
                 </p>
                 <div className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold group-hover:bg-blue-700 transition-colors">
-                  {dict.home.startReceiving}
+                  {dict.home.startHosting}
                 </div>
               </div>
             </div>
           </Link>
 
-          {/* Send Files Card */}
-          <Link href={`/${lang}/send`} className="group">
+          {/* Join Meeting Card */}
+          <Link href={`/${lang}/join`} className="group">
             <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 border border-gray-200 hover:border-green-300 transform hover:-translate-y-1">
               <div className="text-center">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-green-200 transition-colors">
-                  <Upload className="w-8 h-8 text-green-600" />
+                  <Phone className="w-8 h-8 text-green-600" />
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">{dict.home.sendFiles}</h3>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">{dict.home.joinMeeting}</h3>
                 <p className="text-gray-600 mb-6">
-                  {dict.home.sendDescription}
+                  {dict.home.joinDescription}
                 </p>
                 <div className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold group-hover:bg-green-700 transition-colors">
-                  {dict.home.startSending}
+                  {dict.home.startJoining}
                 </div>
               </div>
             </div>
@@ -97,8 +97,8 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
             <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Users className="w-6 h-6 text-purple-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{dict.home.featureEasyConnection}</h3>
-            <p className="text-gray-600">{dict.home.featureEasyConnectionDesc}</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{dict.home.featureMultiParticipant}</h3>
+            <p className="text-gray-600">{dict.home.featureMultiParticipantDesc}</p>
           </div>
         </div>
       </main>
