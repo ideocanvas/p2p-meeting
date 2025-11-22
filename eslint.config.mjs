@@ -34,6 +34,10 @@ const eslintConfig = [
         HTMLLabelElement: "readonly",
         HTMLVideoElement: "readonly",
         HTMLAudioElement: "readonly",
+        HTMLElement: "readonly",
+        // DOM event types
+        MouseEvent: "readonly",
+        KeyboardEvent: "readonly",
         // Media types
         MediaStream: "readonly",
         MediaStreamTrack: "readonly",

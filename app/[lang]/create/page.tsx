@@ -11,19 +11,25 @@ import { meetingService } from '@/lib/meeting-service'
 import { CreateRoomRequest } from '@/lib/types'
 import { toast } from 'sonner'
 import { 
+  ArrowLeft, 
   Users, 
   Lock, 
   Clock, 
   Video, 
   Mic, 
   MessageSquare, 
-  Share2, 
+  Share2,
   Calendar,
-  Settings
+  Check,
+  ChevronRight
 } from 'lucide-react'
+import Link from 'next/link'
+
+type Step = 'basic' | 'settings' | 'review'
 
 export default function CreateRoomPage({ params }: { params: Promise<{ lang: string }> }) {
   const [lang, setLang] = useState('en')
+  const [currentStep, setCurrentStep] = useState<Step>('basic')
   const [isCreating, setIsCreating] = useState(false)
   const [confirmPassword, setConfirmPassword] = useState('')
   const router = useRouter()
@@ -35,7 +41,7 @@ export default function CreateRoomPage({ params }: { params: Promise<{ lang: str
     password: '',
     settings: {
       maxParticipants: 10,
-      requirePassword: true,
+      requirePassword: false,
       allowWaitingRoom: false,
       muteOnEntry: false,
       videoOnEntry: true,
@@ -73,44 +79,64 @@ export default function CreateRoomPage({ params }: { params: Promise<{ lang: str
     }
   }
 
-  const validateForm = (): string[] => {
+  const validateStep = (step: Step): string[] => {
     const errors: string[] = []
 
-    if (!formData.title.trim() || formData.title.trim().length < 3) {
-      errors.push('Meeting title must be at least 3 characters long')
+    if (step === 'basic') {
+      if (!formData.title.trim() || formData.title.trim().length < 3) {
+        errors.push('Meeting title must be at least 3 characters long')
+      }
+
+      if (!formData.description.trim() || formData.description.trim().length < 10) {
+        errors.push('Description must be at least 10 characters long')
+      }
+
+      if (!formData.roomId.trim()) {
+        errors.push('Room ID is required')
+      } else if (!/^[a-zA-Z0-9-_]{3,50}$/.test(formData.roomId)) {
+        errors.push('Room ID must be 3-50 characters containing letters, numbers, hyphens, or underscores')
+      }
+
+      if (!formData.password.trim()) {
+        errors.push('Password is required')
+      } else if (formData.password.length < 4) {
+        errors.push('Password must be at least 4 characters long')
+      }
+
+      if (formData.password !== confirmPassword) {
+        errors.push('Passwords do not match')
+      }
     }
 
-    if (!formData.description.trim() || formData.description.trim().length < 10) {
-      errors.push('Description must be at least 10 characters long')
-    }
-
-    if (!formData.roomId.trim()) {
-      errors.push('Room ID is required')
-    } else if (!/^[a-zA-Z0-9-_]{3,50}$/.test(formData.roomId)) {
-      errors.push('Room ID must be 3-50 characters containing letters, numbers, hyphens, or underscores')
-    }
-
-    if (!formData.password.trim()) {
-      errors.push('Password is required')
-    } else if (formData.password.length < 4) {
-      errors.push('Password must be at least 4 characters long')
-    }
-
-    if (formData.password !== confirmPassword) {
-      errors.push('Passwords do not match')
-    }
-
-    if (formData.settings.maxParticipants < 2 || formData.settings.maxParticipants > 100) {
-      errors.push('Max participants must be between 2 and 100')
+    if (step === 'settings') {
+      if (formData.settings.maxParticipants < 2 || formData.settings.maxParticipants > 100) {
+        errors.push('Max participants must be between 2 and 100')
+      }
     }
 
     return errors
   }
 
+  const handleNextStep = () => {
+    const errors = validateStep(currentStep)
+    if (errors.length > 0) {
+      errors.forEach(error => toast.error(error))
+      return
+    }
+
+    if (currentStep === 'basic') setCurrentStep('settings')
+    else if (currentStep === 'settings') setCurrentStep('review')
+  }
+
+  const handlePreviousStep = () => {
+    if (currentStep === 'settings') setCurrentStep('basic')
+    else if (currentStep === 'review') setCurrentStep('settings')
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const errors = validateForm()
+    const errors = validateStep('review')
     if (errors.length > 0) {
       errors.forEach(error => toast.error(error))
       return
@@ -126,13 +152,25 @@ export default function CreateRoomPage({ params }: { params: Promise<{ lang: str
         
         // Store room info for management
         if (typeof window !== 'undefined') {
+          const existingRooms = JSON.parse(window.localStorage.getItem('persistentRooms') || '[]')
+          const newRoom = {
+            id: response.roomId,
+            title: formData.title,
+            description: formData.description,
+            ownerId: `owner_${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            isActive: true,
+            settings: formData.settings
+          }
+          window.localStorage.setItem('persistentRooms', JSON.stringify([...existingRooms, newRoom]))
           window.localStorage.setItem('roomId', response.roomId)
           window.localStorage.setItem('roomPassword', formData.password)
           window.localStorage.setItem('isRoomOwner', 'true')
         }
         
-        // Redirect to room management page
-        router.push(`/${lang}/room/${response.roomId}`)
+        // Redirect to dashboard
+        router.push(`/${lang}/dashboard`)
       } else {
         toast.error(response.error || 'Failed to create room')
       }
@@ -146,301 +184,371 @@ export default function CreateRoomPage({ params }: { params: Promise<{ lang: str
 
   const generateRoomIdSuggestion = () => {
     const titleWords = formData.title.toLowerCase().split(/\s+/).filter(word => word.length > 2)
-    if (titleWords.length > 0) {
+    if (titleWords.length > 0 && !formData.roomId) {
       const suggestion = titleWords.slice(0, 2).join('-')
-      if (!formData.roomId) {
-        setFormData(prev => ({ ...prev, roomId: suggestion }))
-      }
+      setFormData(prev => ({ ...prev, roomId: suggestion }))
     }
   }
 
-  return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-2xl mx-auto">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold mb-2">Create Persistent Meeting Room</h1>
-          <p className="text-gray-600">
-            Set up a permanent meeting room with a fixed, reusable link
-          </p>
-        </div>
+  const steps = [
+    { id: 'basic', title: 'Basic Info', description: 'Room details and security' },
+    { id: 'settings', title: 'Settings', description: 'Meeting preferences' },
+    { id: 'review', title: 'Review', description: 'Confirm and create' }
+  ]
 
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <Link
+              href={`/${lang}/dashboard`}
+              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Dashboard</span>
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900">Create Persistent Room</h1>
+            <div className="w-24"></div> {/* Spacer for balance */}
+          </div>
+        </div>
+      </div>
+
+      {/* Progress Steps */}
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="flex items-center justify-center space-x-8">
+          {steps.map((step, index) => (
+            <div key={step.id} className="flex items-center">
+              <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
+                currentStep === step.id ? 'bg-blue-600 text-white' :
+                steps.findIndex(s => s.id === currentStep) > index ? 'bg-green-600 text-white' :
+                'bg-gray-200 text-gray-600'
+              }`}>
+                {steps.findIndex(s => s.id === currentStep) > index ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <span>{index + 1}</span>
+                )}
+              </div>
+              <div className="ml-3">
+                <div className={`text-sm font-medium ${
+                  currentStep === step.id ? 'text-blue-600' : 'text-gray-600'
+                }`}>
+                  {step.title}
+                </div>
+                <div className="text-xs text-gray-500">{step.description}</div>
+              </div>
+              {index < steps.length - 1 && (
+                <div className="ml-8 w-16 h-px bg-gray-300"></div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-4xl mx-auto px-4 py-8">
         <Card>
           <CardHeader>
-            <CardTitle>Room Configuration</CardTitle>
+            <CardTitle className="text-xl">
+              {currentStep === 'basic' && 'Room Information'}
+              {currentStep === 'settings' && 'Meeting Settings'}
+              {currentStep === 'review' && 'Review & Create'}
+            </CardTitle>
             <CardDescription>
-              Configure your permanent meeting room with custom settings
+              {currentStep === 'basic' && 'Set up the basic details for your persistent meeting room'}
+              {currentStep === 'settings' && 'Configure how meetings will work in this room'}
+              {currentStep === 'review' && 'Review your settings before creating the room'}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Basic Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Settings className="w-5 h-5" />
-                  Basic Information
-                </h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="title">Room Title *</Label>
-                  <Input
-                    id="title"
-                    placeholder="e.g., Team Weekly Meeting"
-                    value={formData.title}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
-                    onBlur={generateRoomIdSuggestion}
-                    required
-                  />
-                </div>
+              {/* Step 1: Basic Information */}
+              {currentStep === 'basic' && (
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="title">Room Title *</Label>
+                      <Input
+                        id="title"
+                        placeholder="e.g., Team Weekly Meeting, Project Review"
+                        value={formData.title}
+                        onChange={(e) => handleInputChange('title', e.target.value)}
+                        onBlur={generateRoomIdSuggestion}
+                        required
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Room Description *</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Describe the purpose of this meeting room..."
-                    value={formData.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    required
-                    rows={3}
-                  />
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="description">Room Description *</Label>
+                      <Textarea
+                        id="description"
+                        placeholder="Describe the purpose of this meeting room..."
+                        value={formData.description}
+                        onChange={(e) => handleInputChange('description', e.target.value)}
+                        required
+                        rows={3}
+                      />
+                    </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="roomId">Permanent Room ID *</Label>
-                  <Input
-                    id="roomId"
-                    placeholder="e.g., team-weekly or project-review"
-                    value={formData.roomId}
-                    onChange={(e) => handleInputChange('roomId', e.target.value.toLowerCase())}
-                    required
-                    className="font-mono"
-                  />
-                  <p className="text-xs text-gray-500">
-                    This will be your permanent meeting URL: /room/{formData.roomId || 'your-id'}
-                  </p>
-                </div>
-              </div>
-
-              {/* Security Settings */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Lock className="w-5 h-5" />
-                  Security
-                </h3>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="password">Room Password *</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Set a password for room management"
-                    value={formData.password}
-                    onChange={(e) => handleInputChange('password', e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Confirm your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="requirePassword"
-                    checked={formData.settings.requirePassword}
-                    onChange={(e) => handleInputChange('settings.requirePassword', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="requirePassword" className="text-sm">
-                    Require password for participants to join
-                  </Label>
-                </div>
-              </div>
-
-              {/* Meeting Settings */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <Video className="w-5 h-5" />
-                  Meeting Settings
-                </h3>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="maxParticipants" className="flex items-center gap-1">
-                      <Users className="w-4 h-4" />
-                      Max Participants
-                    </Label>
-                    <Input
-                      id="maxParticipants"
-                      type="number"
-                      min="2"
-                      max="100"
-                      value={formData.settings.maxParticipants}
-                      onChange={(e) => handleInputChange('settings.maxParticipants', parseInt(e.target.value))}
-                    />
+                    <div className="space-y-2">
+                      <Label htmlFor="roomId">Permanent Room ID *</Label>
+                      <Input
+                        id="roomId"
+                        placeholder="e.g., team-weekly or project-review"
+                        value={formData.roomId}
+                        onChange={(e) => handleInputChange('roomId', e.target.value.toLowerCase())}
+                        required
+                        className="font-mono"
+                      />
+                      <p className="text-xs text-gray-500">
+                        This will be your permanent meeting URL: /room/{formData.roomId || 'your-id'}
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="defaultMeetingDuration" className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      Default Duration (minutes)
-                    </Label>
-                    <Input
-                      id="defaultMeetingDuration"
-                      type="number"
-                      min="15"
-                      max="480"
-                      value={formData.settings.defaultMeetingDuration}
-                      onChange={(e) => handleInputChange('settings.defaultMeetingDuration', parseInt(e.target.value))}
-                    />
+                  <div className="space-y-4 border-t pt-6">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Lock className="w-5 h-5" />
+                      Security
+                    </h3>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Room Password *</Label>
+                      <Input
+                        id="password"
+                        type="password"
+                        placeholder="Set a password for room management"
+                        value={formData.password}
+                        onChange={(e) => handleInputChange('password', e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        placeholder="Confirm your password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="videoOnEntry"
-                      checked={formData.settings.videoOnEntry}
-                      onChange={(e) => handleInputChange('settings.videoOnEntry', e.target.checked)}
-                      className="rounded"
-                    />
-                    <Label htmlFor="videoOnEntry" className="text-sm flex items-center gap-1">
-                      <Video className="w-4 h-4" />
-                      Video on entry
-                    </Label>
+              {/* Step 2: Settings */}
+              {currentStep === 'settings' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="maxParticipants" className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        Max Participants
+                      </Label>
+                      <Input
+                        id="maxParticipants"
+                        type="number"
+                        min="2"
+                        max="100"
+                        value={formData.settings.maxParticipants}
+                        onChange={(e) => handleInputChange('settings.maxParticipants', parseInt(e.target.value))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="defaultMeetingDuration" className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        Default Duration (minutes)
+                      </Label>
+                      <Input
+                        id="defaultMeetingDuration"
+                        type="number"
+                        min="15"
+                        max="480"
+                        value={formData.settings.defaultMeetingDuration}
+                        onChange={(e) => handleInputChange('settings.defaultMeetingDuration', parseInt(e.target.value))}
+                      />
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="muteOnEntry"
-                      checked={formData.settings.muteOnEntry}
-                      onChange={(e) => handleInputChange('settings.muteOnEntry', e.target.checked)}
-                      className="rounded"
-                    />
-                    <Label htmlFor="muteOnEntry" className="text-sm flex items-center gap-1">
-                      <Mic className="w-4 h-4" />
-                      Mute on entry
-                    </Label>
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Meeting Preferences</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="videoOnEntry"
+                          checked={formData.settings.videoOnEntry}
+                          onChange={(e) => handleInputChange('settings.videoOnEntry', e.target.checked)}
+                          className="rounded"
+                        />
+                        <Label htmlFor="videoOnEntry" className="text-sm flex items-center gap-1">
+                          <Video className="w-4 h-4" />
+                          Video on entry
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="muteOnEntry"
+                          checked={formData.settings.muteOnEntry}
+                          onChange={(e) => handleInputChange('settings.muteOnEntry', e.target.checked)}
+                          className="rounded"
+                        />
+                        <Label htmlFor="muteOnEntry" className="text-sm flex items-center gap-1">
+                          <Mic className="w-4 h-4" />
+                          Mute on entry
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="enableChat"
+                          checked={formData.settings.enableChat}
+                          onChange={(e) => handleInputChange('settings.enableChat', e.target.checked)}
+                          className="rounded"
+                        />
+                        <Label htmlFor="enableChat" className="text-sm flex items-center gap-1">
+                          <MessageSquare className="w-4 h-4" />
+                          Enable chat
+                        </Label>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="enableScreenShare"
+                          checked={formData.settings.enableScreenShare}
+                          onChange={(e) => handleInputChange('settings.enableScreenShare', e.target.checked)}
+                          className="rounded"
+                        />
+                        <Label htmlFor="enableScreenShare" className="text-sm flex items-center gap-1">
+                          <Share2 className="w-4 h-4" />
+                          Enable screen share
+                        </Label>
+                      </div>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="enableChat"
-                      checked={formData.settings.enableChat}
-                      onChange={(e) => handleInputChange('settings.enableChat', e.target.checked)}
-                      className="rounded"
-                    />
-                    <Label htmlFor="enableChat" className="text-sm flex items-center gap-1">
-                      <MessageSquare className="w-4 h-4" />
-                      Enable chat
-                    </Label>
+              {/* Step 3: Review */}
+              {currentStep === 'review' && (
+                <div className="space-y-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center">
+                      <Check className="w-5 h-5 text-green-600 mr-2" />
+                      <span className="text-green-800 font-medium">Ready to create your persistent room!</span>
+                    </div>
                   </div>
 
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="enableScreenShare"
-                      checked={formData.settings.enableScreenShare}
-                      onChange={(e) => handleInputChange('settings.enableScreenShare', e.target.checked)}
-                      className="rounded"
-                    />
-                    <Label htmlFor="enableScreenShare" className="text-sm flex items-center gap-1">
-                      <Share2 className="w-4 h-4" />
-                      Enable screen share
-                    </Label>
+                  <div className="space-y-4">
+                    <h4 className="font-medium">Room Summary</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Title:</span>
+                        <p className="font-medium">{formData.title}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Room ID:</span>
+                        <p className="font-mono font-medium">{formData.roomId}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Description:</span>
+                        <p className="font-medium line-clamp-2">{formData.description}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Max Participants:</span>
+                        <p className="font-medium">{formData.settings.maxParticipants}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="font-medium">Settings</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {formData.settings.videoOnEntry && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
+                          <Video className="w-3 h-3 mr-1" />
+                          Video On Entry
+                        </span>
+                      )}
+                      {formData.settings.enableChat && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                          💬 Chat Enabled
+                        </span>
+                      )}
+                      {formData.settings.enableScreenShare && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
+                          🖥️ Screen Share
+                        </span>
+                      )}
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {formData.settings.defaultMeetingDuration} min
+                      </span>
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="autoRecord"
-                    checked={formData.settings.autoRecord}
-                    onChange={(e) => handleInputChange('settings.autoRecord', e.target.checked)}
-                    className="rounded"
-                  />
-                  <Label htmlFor="autoRecord" className="text-sm flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
-                    Auto-record meetings
-                  </Label>
-                </div>
-              </div>
-
-              {/* Room Information */}
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
-                  <Info className="w-4 h-4" />
-                  Room Information
-                </h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• This room will have a permanent URL: /room/{formData.roomId || 'your-id'}</li>
-                  <li>• You can share this link with participants anytime</li>
-                  <li>• The room will remain active until you delete it</li>
-                  <li>• You can schedule multiple meetings in the same room</li>
-                  <li>• All meeting recordings will be stored in this room</li>
-                </ul>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="submit"
-                  disabled={isCreating}
-                  className="flex-1"
-                >
-                  {isCreating ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                      Creating Persistent Room...
-                    </>
-                  ) : (
-                    'Create Persistent Room'
+              {/* Navigation Buttons */}
+              <div className="flex justify-between pt-6">
+                <div>
+                  {currentStep !== 'basic' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handlePreviousStep}
+                      disabled={isCreating}
+                    >
+                      Previous
+                    </Button>
                   )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push(`/${lang}`)}
-                  disabled={isCreating}
-                >
-                  Cancel
-                </Button>
+                </div>
+                
+                <div className="flex gap-3">
+                  {currentStep !== 'review' ? (
+                    <Button
+                      type="button"
+                      onClick={handleNextStep}
+                      className="flex items-center gap-2"
+                    >
+                      Next
+                      <ChevronRight className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      type="submit"
+                      disabled={isCreating}
+                      className="flex items-center gap-2"
+                    >
+                      {isCreating ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                          Creating Room...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Create Persistent Room
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </form>
           </CardContent>
         </Card>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Looking for a quick meeting?{' '}
-            <button
-              onClick={() => router.push(`/${lang}/quick-meeting`)}
-              className="text-blue-600 hover:text-blue-800 font-medium"
-            >
-              Create a quick meeting instead
-            </button>
-          </p>
-        </div>
       </div>
     </div>
   )
 }
-
-// Simple Info icon component
-const Info = ({ className }: { className?: string }) => (
-  <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-  </svg>
-)

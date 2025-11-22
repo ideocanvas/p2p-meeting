@@ -1,4 +1,4 @@
-import { Video, Users, Shield, Zap, Phone } from 'lucide-react'
+import { Video, Users, Shield, Zap, Phone, Calendar, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { getDictionary, Locale } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
@@ -37,7 +37,25 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
         </div>
 
         {/* Action Cards */}
-        <div className="grid md:grid-cols-2 gap-8 mb-16">
+        <div className="grid md:grid-cols-3 gap-8 mb-16">
+          {/* Dashboard Card */}
+          <Link href={`/${lang}/dashboard`} className="group">
+            <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 border border-gray-200 hover:border-purple-300 transform hover:-translate-y-1">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:bg-purple-200 transition-colors">
+                  <Settings className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Manage Rooms</h3>
+                <p className="text-gray-600 mb-6">
+                  Create and manage persistent meeting rooms with fixed, reusable links
+                </p>
+                <div className="bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold group-hover:bg-purple-700 transition-colors">
+                  View Dashboard
+                </div>
+              </div>
+            </div>
+          </Link>
+
           {/* Create Meeting Card */}
           <Link href={`/${lang}/create`} className="group">
             <div className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 border border-gray-200 hover:border-blue-300 transform hover:-translate-y-1">
@@ -76,7 +94,7 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
         </div>
 
         {/* Features Section */}
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-4 gap-8">
           <div className="text-center">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Shield className="w-6 h-6 text-blue-600" />
@@ -99,6 +117,14 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{dict.home.featureMultiParticipant}</h3>
             <p className="text-gray-600">{dict.home.featureMultiParticipantDesc}</p>
+          </div>
+          
+          <div className="text-center">
+            <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Calendar className="w-6 h-6 text-orange-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Persistent Rooms</h3>
+            <p className="text-gray-600">Fixed, reusable meeting links for regular meetings</p>
           </div>
         </div>
       </main>
