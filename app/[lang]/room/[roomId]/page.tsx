@@ -6,25 +6,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { meetingService } from '@/lib/meeting-service'
 import { toast } from 'sonner'
-import { 
-  Video, 
-  VideoOff, 
-  Mic, 
-  MicOff, 
-  Users, 
-  Settings, 
+import {
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
+  Users,
+  Settings,
   PhoneOff,
   Share,
   MessageSquare,
   Maximize2
 } from 'lucide-react'
+import { PersistentMeetingRoom } from '@/lib/types'
 
-export default function RoomPage() {
-  const params = useParams()
+// Type for room info without password (what the API returns)
+type RoomInfoWithoutPassword = Omit<PersistentMeetingRoom, 'password'>
+
+export default function RoomPage({ params }: { params: Promise<{ lang: string; roomId: string }> }) {
+  const [lang, setLang] = useState('en')
+  const [roomId, setRoomId] = useState('')
   const router = useRouter()
-  const roomId = params.roomId as string
   
-  const [roomInfo, setRoomInfo] = useState<unknown>(null)
+  const [roomInfo, setRoomInfo] = useState<RoomInfoWithoutPassword | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isAudioEnabled, setIsAudioEnabled] = useState(true)
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
@@ -34,6 +38,17 @@ export default function RoomPage() {
   const [isConnected, setIsConnected] = useState(false)
 
   useEffect(() => {
+    const loadParams = async () => {
+      const resolvedParams = await params
+      setLang(resolvedParams.lang)
+      setRoomId(resolvedParams.roomId)
+    }
+    loadParams()
+  }, [params])
+
+  useEffect(() => {
+    if (!roomId) return
+
     // Load participant info from localStorage
     if (typeof window !== 'undefined') {
       const name = window.localStorage.getItem('participantName')
@@ -74,12 +89,12 @@ export default function RoomPage() {
         }, 1000)
       } else {
         toast.error(response.error || 'Failed to load room information')
-        router.push('/join')
+        router.push(`/${lang}/join`)
       }
     } catch (error) {
       console.error('Error loading room info:', error)
       toast.error('Failed to load room information')
-      router.push('/join')
+      router.push(`/${lang}/join`)
     } finally {
       setIsLoading(false)
     }
@@ -106,7 +121,7 @@ export default function RoomPage() {
         window.localStorage.removeItem('participantName')
         window.localStorage.removeItem('roomId')
       }
-      router.push('/')
+      router.push(`/${lang}`)
     } catch (error) {
       console.error('Error leaving meeting:', error)
       toast.error('Failed to leave meeting')
@@ -184,7 +199,7 @@ export default function RoomPage() {
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <h1 className="text-lg font-semibold">{(roomInfo as { title: string }).title}</h1>
+              <h1 className="text-lg font-semibold">{roomInfo.title}</h1>
               <div className="flex items-center space-x-2 text-sm text-gray-400">
                 <Users className="w-4 h-4" />
                 <span>1 participant</span>
@@ -323,7 +338,7 @@ export default function RoomPage() {
             <CardHeader>
               <CardTitle>Join Meeting</CardTitle>
               <CardDescription>
-                Click below to join the meeting "{(roomInfo as { title: string }).title}"
+                Click below to join the meeting "{roomInfo.title}"
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -331,14 +346,14 @@ export default function RoomPage() {
                 <div className="text-sm text-gray-600">
                   <p><strong>Room ID:</strong> {roomId}</p>
                   <p><strong>Your Name:</strong> {participantName}</p>
-                  <p><strong>Host:</strong> {(roomInfo as { hostName: string }).hostName}</p>
+                  <p><strong>Host:</strong> {roomInfo.ownerId || 'Unknown'}</p>
                 </div>
                 <Button onClick={handleJoinMeeting} className="w-full">
                   Join Meeting
                 </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => router.push('/join')}
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/${lang}/join`)}
                   className="w-full"
                 >
                   Cancel

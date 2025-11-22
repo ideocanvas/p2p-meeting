@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,19 +9,29 @@ import { meetingService } from '@/lib/meeting-service'
 import { JoinRoomRequest } from '@/lib/types'
 import { toast } from 'sonner'
 
-export default function JoinRoomPage() {
+export default function JoinRoomPage({ params }: { params: Promise<{ lang: string }> }) {
+  const [lang, setLang] = useState('en')
+  
+  // Load language parameter
+  useEffect(() => {
+    const loadParams = async () => {
+      const resolvedParams = await params
+      setLang(resolvedParams.lang)
+    }
+    loadParams()
+  }, [params])
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomId = searchParams.get('roomId')
   
   const [isJoining, setIsJoining] = useState(false)
-  const [formData, setFormData] = useState<JoinRoomRequest>({
+  const [formData, setFormData] = useState({
     roomId: roomId || '',
     participantName: '',
-    password: '',
   })
 
-  const handleInputChange = (field: keyof JoinRoomRequest, value: string) => {
+  const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value,
@@ -56,18 +66,31 @@ export default function JoinRoomPage() {
     setIsJoining(true)
 
     try {
-      const response = await meetingService.joinRoom(formData)
+      // First get room info to check if it exists
+      const roomResponse = await meetingService.getRoom({ roomId: formData.roomId })
+      
+      if (!roomResponse.success || !roomResponse.room) {
+        toast.error(roomResponse.error || 'Room not found')
+        return
+      }
+      
+      // Then join the room
+      const response = await meetingService.joinRoom(formData.roomId, {
+        roomId: formData.roomId,
+        participantName: formData.participantName
+      })
 
-      if (response.success && response.room) {
-        toast.success('Joined room successfully!')
+      if (response.success) {
+        toast.success('Room found! Redirecting to meeting...')
         // Store participant info for the meeting
         if (typeof window !== 'undefined') {
-          window.localStorage.setItem('participantId', response.participantId || '')
+          const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          window.localStorage.setItem('participantId', participantId)
           window.localStorage.setItem('participantName', formData.participantName)
           window.localStorage.setItem('roomId', formData.roomId)
         }
         
-        router.push(`/room/${formData.roomId}`)
+        router.push(`/${lang}/room/${formData.roomId}`)
       } else {
         toast.error(response.error || 'Failed to join room')
       }
@@ -122,18 +145,14 @@ export default function JoinRoomPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label htmlFor="password" className="text-sm font-medium">Room Password</label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Enter room password (if required)"
-                  value={formData.password}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('password', e.target.value)}
-                />
-                <p className="text-xs text-gray-500">
-                  Only required if the room is password protected
-                </p>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">Before You Join</h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• Make sure you have a working camera and microphone</li>
+                  <li>• Use a modern browser (Chrome, Firefox, Safari, Edge)</li>
+                  <li>• Ensure you have a stable internet connection</li>
+                  <li>• Allow browser permissions for camera and microphone when prompted</li>
+                </ul>
               </div>
 
               <div className="bg-blue-50 p-4 rounded-lg">

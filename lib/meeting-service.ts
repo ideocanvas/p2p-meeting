@@ -37,7 +37,7 @@ class MeetingService {
     return response.json()
   }
 
-  // Create a new meeting room
+  // Create a new persistent meeting room
   async createRoom(request: CreateRoomRequest): Promise<CreateRoomResponse> {
     return this.request<CreateRoomResponse>('/rooms', {
       method: 'POST',
@@ -72,8 +72,8 @@ class MeetingService {
   }
 
   // Join a meeting room as participant
-  async joinRoom(request: JoinRoomRequest): Promise<JoinRoomResponse> {
-    return this.request<JoinRoomResponse>('/rooms/join', {
+  async joinRoom(roomId: string, request: JoinRoomRequest): Promise<JoinRoomResponse> {
+    return this.request<JoinRoomResponse>(`/rooms/${roomId}/join`, {
       method: 'POST',
       body: JSON.stringify(request),
     })
@@ -116,45 +116,19 @@ class MeetingService {
     }
   }
 
-  // Check if room is active (meeting time has started but not expired)
+  // Check if room is active (persistent rooms are always active unless disabled)
   isRoomActive(room: PersistentMeetingRoom): boolean {
-    const now = new Date()
-    const meetingTime = new Date(room.meetingDate)
-    const expiryTime = new Date(room.expiryDate)
-    
-    return now >= meetingTime && now < expiryTime && room.status === 'active'
-  }
-
-  // Check if room is scheduled (meeting time is in the future)
-  isRoomScheduled(room: PersistentMeetingRoom): boolean {
-    const now = new Date()
-    const meetingTime = new Date(room.meetingDate)
-    
-    return now < meetingTime && room.status === 'scheduled'
-  }
-
-  // Check if room has expired
-  isRoomExpired(room: PersistentMeetingRoom): boolean {
-    const now = new Date()
-    const expiryTime = new Date(room.expiryDate)
-    
-    return now >= expiryTime || room.status === 'expired'
+    return room.isActive
   }
 
   // Get room status for display
   getRoomStatus(room: PersistentMeetingRoom): string {
-    if (this.isRoomExpired(room)) return 'Expired'
-    if (this.isRoomActive(room)) return 'Active'
-    if (this.isRoomScheduled(room)) return 'Scheduled'
-    return 'Ended'
+    return room.isActive ? 'Active' : 'Inactive'
   }
 
   // Get room status color
   getRoomStatusColor(room: PersistentMeetingRoom): string {
-    if (this.isRoomExpired(room)) return 'text-red-600'
-    if (this.isRoomActive(room)) return 'text-green-600'
-    if (this.isRoomScheduled(room)) return 'text-blue-600'
-    return 'text-gray-600'
+    return room.isActive ? 'text-green-600' : 'text-gray-600'
   }
 
   // Calculate time until meeting

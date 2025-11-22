@@ -1,169 +1,105 @@
-import { PersistentMeetingRoom, CreateRoomRequest, MeetingRoomSettings } from './types'
+import { PersistentMeetingRoom, CreateRoomRequest, MeetingInstance } from './types'
 
-// Utility functions for meeting room management
-export function generateRoomId(length: number = 8): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  let result = ''
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
+// In-memory storage for development (replace with KV in production)
+export const memoryStorage = new Map<string, PersistentMeetingRoom>();
+export const meetingInstancesStorage = new Map<string, MeetingInstance>();
+
+// Utility functions for persistent meeting room management
+export function isValidRoomId(id: string): boolean {
+  // Allow human-readable IDs with letters, numbers, hyphens, underscores
+  return /^[a-zA-Z0-9-_]{3,50}$/.test(id);
 }
 
 export function hashPassword(password: string): string {
-  // Simple hash function for demo purposes
-  // In production, use a proper hashing library like bcrypt
-  let hash = 0
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash // Convert to 32bit integer
-  }
-  return hash.toString()
+  // In a real app, use bcrypt.hash(password, 10)
+  return password;
 }
 
-export function validatePassword(password: string, hashedPassword: string): boolean {
-  return hashPassword(password) === hashedPassword
+export function validatePassword(input: string, hash: string): boolean {
+  // In a real app, use bcrypt.compare(input, hash)
+  return input === hash;
 }
 
-export function isValidMeetingDate(dateString: string): boolean {
-  const date = new Date(dateString)
-  const now = new Date()
-  return date > now
-}
-
-export function isRoomExpired(room: PersistentMeetingRoom): boolean {
-  return new Date(room.expiryDate) < new Date()
-}
-
-export function createDefaultSettings(): MeetingRoomSettings {
+export function createRoomFromRequest(body: CreateRoomRequest, ownerId: string): PersistentMeetingRoom {
+  const now = new Date().toISOString();
+  
   return {
-    requirePassword: true,
-    allowWaitingRoom: false,
-    muteOnEntry: false,
-    videoOnEntry: true,
-    enableChat: true,
-    enableScreenShare: true,
-    recordMeeting: false,
-  }
-}
-
-export function validateCreateRoomRequest(request: CreateRoomRequest): string[] {
-  const errors: string[] = []
-
-  if (!request.title || request.title.trim().length < 3) {
-    errors.push('Title must be at least 3 characters long')
-  }
-
-  if (!request.hostName || request.hostName.trim().length < 2) {
-    errors.push('Host name must be at least 2 characters long')
-  }
-
-  if (!request.password || request.password.length < 4) {
-    errors.push('Password must be at least 4 characters long')
-  }
-
-  if (!request.meetingDate) {
-    errors.push('Meeting date is required')
-  } else if (!isValidMeetingDate(request.meetingDate)) {
-    errors.push('Meeting date must be in the future')
-  }
-
-  if (request.maxParticipants && (request.maxParticipants < 2 || request.maxParticipants > 50)) {
-    errors.push('Max participants must be between 2 and 50')
-  }
-
-  return errors
-}
-
-export function sanitizeRoomTitle(title: string): string {
-  return title.trim().substring(0, 100)
-}
-
-export function sanitizeHostName(hostName: string): string {
-  return hostName.trim().substring(0, 50)
-}
-
-export function sanitizeDescription(description?: string): string {
-  return description ? description.trim().substring(0, 500) : ''
-}
-
-export function calculateExpiryDate(meetingDate: string): string {
-  const meeting = new Date(meetingDate)
-  const expiry = new Date(meeting.getTime() + 24 * 60 * 60 * 1000) // Add 24 hours
-  return expiry.toISOString()
-}
-
-export function formatMeetingDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleString()
-}
-
-export function generateJoinLink(roomId: string, baseUrl: string = ''): string {
-  return `${baseUrl}/room/${roomId}`
-}
-
-export function isValidRoomId(roomId: string): boolean {
-  return /^[A-Z0-9]{6,12}$/.test(roomId)
-}
-
-export function createRoomFromRequest(
-  request: CreateRoomRequest,
-  hostId: string
-): PersistentMeetingRoom {
-  const now = new Date().toISOString()
-  const roomId = generateRoomId()
-
-  return {
-    id: roomId,
-    title: sanitizeRoomTitle(request.title),
-    hostId,
-    hostName: sanitizeHostName(request.hostName),
-    password: hashPassword(request.password),
-    meetingDate: request.meetingDate,
-    expiryDate: calculateExpiryDate(request.meetingDate),
+    id: body.roomId, // Use the user-provided fixed ID
+    title: body.title,
+    description: body.description,
+    ownerId,
     createdAt: now,
     updatedAt: now,
-    status: 'scheduled',
-    maxParticipants: request.maxParticipants || 10,
-    currentParticipants: 0,
-    description: sanitizeDescription(request.description),
-    settings: { ...createDefaultSettings(), ...request.settings },
+    isActive: true,
+    settings: {
+      maxParticipants: body.settings.maxParticipants || 10,
+      requirePassword: body.settings.requirePassword !== false,
+      allowWaitingRoom: body.settings.allowWaitingRoom || false,
+      muteOnEntry: body.settings.muteOnEntry || false,
+      videoOnEntry: body.settings.videoOnEntry !== false,
+      enableChat: body.settings.enableChat !== false,
+      enableScreenShare: body.settings.enableScreenShare !== false,
+      autoRecord: body.settings.autoRecord || false,
+      defaultMeetingDuration: body.settings.defaultMeetingDuration || 60,
+    },
+    recurringSchedule: body.recurringSchedule,
+  };
+}
+
+export function validateCreateRoomRequest(body: CreateRoomRequest): string[] {
+  const errors = [];
+  
+  if (!body.title || body.title.trim().length < 3) {
+    errors.push("Title must be at least 3 characters long");
   }
+  
+  if (!body.description || body.description.trim().length < 10) {
+    errors.push("Description must be at least 10 characters long");
+  }
+  
+  if (!body.roomId || !isValidRoomId(body.roomId)) {
+    errors.push("Room ID must be 3-50 characters containing letters, numbers, hyphens, or underscores");
+  }
+  
+  if (!body.password || body.password.length < 4) {
+    errors.push("Password must be at least 4 characters long");
+  }
+  
+  if (body.settings.maxParticipants && (body.settings.maxParticipants < 2 || body.settings.maxParticipants > 100)) {
+    errors.push("Max participants must be between 2 and 100");
+  }
+  
+  return errors;
 }
 
 export function canJoinRoom(room: PersistentMeetingRoom): { canJoin: boolean; reason?: string } {
-  if (isRoomExpired(room)) {
-    return { canJoin: false, reason: 'Room has expired' }
+  if (!room.isActive) {
+    return { canJoin: false, reason: 'Room is not active' }
   }
 
-  if (room.status === 'ended') {
-    return { canJoin: false, reason: 'Meeting has ended' }
-  }
-
-  if (room.currentParticipants >= room.maxParticipants) {
-    return { canJoin: false, reason: 'Room is full' }
-  }
-
+  // For persistent rooms, we don't check expiration - rooms are permanent
+  // Instead, we check if the room is currently hosting a meeting
+  // This would be enhanced with meeting instance checking in a real implementation
+  
   return { canJoin: true }
 }
 
-export function updateRoomStatus(room: PersistentMeetingRoom): PersistentMeetingRoom {
-  const now = new Date()
-  const meetingTime = new Date(room.meetingDate)
-  const expiryTime = new Date(room.expiryDate)
+export function generateMeetingId(): string {
+  return `meeting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
 
-  let newStatus = room.status
-
-  if (now > expiryTime) {
-    newStatus = 'expired'
-  } else if (now >= meetingTime && room.status === 'scheduled') {
-    newStatus = 'active'
-  }
-
+export function createMeetingInstance(roomId: string, scheduledTime: string, maxParticipants: number): MeetingInstance {
   return {
-    ...room,
-    status: newStatus,
-    updatedAt: new Date().toISOString(),
-  }
+    id: generateMeetingId(),
+    roomId,
+    scheduledTime,
+    status: 'scheduled',
+    currentParticipants: 0,
+    maxParticipants,
+  };
+}
+
+export function isRoomAvailable(roomId: string): boolean {
+  const room = memoryStorage.get(roomId);
+  return !!room && room.isActive;
 }

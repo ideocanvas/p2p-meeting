@@ -3,7 +3,7 @@
 import Peer, { DataConnection } from "peerjs";
 import { ICE_SERVERS } from "@/lib/connection-strategies";
 import { LogEntry } from "@/components/connection-logger";
-import { Participant, MeetingRoom, WebRTCMessage, ConnectionState, IMediaStream } from "@/lib/types";
+import { Participant, TemporaryMeetingRoom, WebRTCMessage, ConnectionState, IMediaStream } from "@/lib/types";
 
 interface MeetingManagerCallbacks {
   onConnectionStateChange: (state: ConnectionState) => void;
@@ -33,7 +33,7 @@ class MeetingManager {
   private error: string | null = null;
   private verificationCode: string | null = null;
   private isVerified: boolean = false;
-  private meetingRoom: MeetingRoom | null = null;
+  private meetingRoom: TemporaryMeetingRoom | null = null;
 
   // Refs for cleanup
   private timeoutRef: NodeJS.Timeout | null = null;
