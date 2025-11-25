@@ -21,6 +21,7 @@ class MeetingManager {
   private localStream: MediaStream | null = null;
   private connections: Map<string, DataConnection> = new Map(); // peerId -> conn
   private calls: Map<string, MediaConnection> = new Map();
+  private trackMonitoringIntervals: Map<string, NodeJS.Timeout> = new Map(); // peerId -> intervalId
   
   // State
   public state: {
@@ -287,17 +288,43 @@ class MeetingManager {
       const existing = this.state.participants.find(p => p.id === call.peer);
       if (existing) {
         existing.stream = remoteStream;
+        // Update initial video/audio state based on tracks
+        existing.hasVideo = remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled;
+        existing.hasAudio = remoteStream.getAudioTracks().length > 0 && remoteStream.getAudioTracks()[0].enabled;
       } else {
         this.state.participants.push({
           id: call.peer,
           name: nameOverride || "User",
           role: 'participant',
           status: 'connected',
-          hasAudio: true,
-          hasVideo: true,
+          hasAudio: remoteStream.getAudioTracks().length > 0 && remoteStream.getAudioTracks()[0].enabled,
+          hasVideo: remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled,
           stream: remoteStream
         });
       }
+      
+      // Monitor track changes for remote participants using polling
+      const checkTrackStates = () => {
+        const participant = this.state.participants.find(p => p.id === call.peer);
+        if (participant && remoteStream) {
+          const videoTrack = remoteStream.getVideoTracks()[0];
+          const audioTrack = remoteStream.getAudioTracks()[0];
+          
+          const newVideoState = videoTrack ? videoTrack.enabled : false;
+          const newAudioState = audioTrack ? audioTrack.enabled : false;
+          
+          if (participant.hasVideo !== newVideoState || participant.hasAudio !== newAudioState) {
+            participant.hasVideo = newVideoState;
+            participant.hasAudio = newAudioState;
+            this.notify();
+          }
+        }
+      };
+      
+      // Check track states periodically
+      const intervalId = setInterval(checkTrackStates, 1000);
+      this.trackMonitoringIntervals.set(call.peer, intervalId);
+      
       this.notify();
     });
 
@@ -310,6 +337,13 @@ class MeetingManager {
       
       // Clean up the call reference
       this.calls.delete(call.peer);
+      
+      // Clean up the track monitoring interval
+      const intervalId = this.trackMonitoringIntervals.get(call.peer);
+      if (intervalId) {
+        clearInterval(intervalId);
+        this.trackMonitoringIntervals.delete(call.peer);
+      }
       
       // Clean up the data connection if it exists
       const conn = this.connections.get(call.peer);
@@ -329,6 +363,10 @@ class MeetingManager {
   getPeerId() { return this.peer?.id; }
 
   leave() {
+    // Clean up all track monitoring intervals
+    this.trackMonitoringIntervals.forEach(intervalId => clearInterval(intervalId));
+    this.trackMonitoringIntervals.clear();
+    
     this.peer?.destroy();
     this.localStream?.getTracks().forEach(t => t.stop());
     this.state = {

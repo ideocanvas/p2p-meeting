@@ -6,14 +6,26 @@ import MeetingManager from '@/services/meeting-manager'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Check, X, Users, Lock, User, Key, Home, Share2, QrCode, Copy } from 'lucide-react'
+import {
+  Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
+  Check, X, Users, Key, QrCode, Copy, Share2
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { PublicRoomInfo, Participant } from '@/lib/types'
 import { secureStorage } from '@/lib/secure-storage'
-import { SiteHeader } from '@/components/site-header'
 import { QRCodeGenerator } from '@/components/qr-code-generator'
 
-// ParticipantVideo component with proper cleanup
+// Helper to generate initials
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+}
+
+// 1. Participant Tile Component (Updated)
 function ParticipantVideo({ participant }: { participant: Participant }) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -21,14 +33,12 @@ function ParticipantVideo({ participant }: { participant: Participant }) {
     const video = videoRef.current
     if (!video) return
 
-    // Set the stream when available
     if (participant.stream) {
       video.srcObject = participant.stream
     }
-
-    // Cleanup function
+    
     return () => {
-      if (video.srcObject) {
+      if (video && video.srcObject) {
         const stream = video.srcObject as MediaStream
         stream.getTracks().forEach(track => track.stop())
         video.srcObject = null
@@ -37,15 +47,38 @@ function ParticipantVideo({ participant }: { participant: Participant }) {
   }, [participant.stream])
 
   return (
-    <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        className="w-full h-full object-cover"
-      />
-      <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded text-sm">
-        {participant.name}
+    <div className="relative bg-gray-900 rounded-xl overflow-hidden aspect-video shadow-sm border border-gray-800 flex items-center justify-center">
+      {participant.hasVideo && participant.stream ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        /* AVATAR STATE */
+        <div className="flex flex-col items-center justify-center w-full h-full bg-gray-800">
+           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+              <span className="text-2xl font-bold text-white tracking-widest">
+                {getInitials(participant.name)}
+              </span>
+           </div>
+           <p className="mt-3 text-gray-400 text-sm font-medium">Camera Off</p>
+        </div>
+      )}
+
+      {/* Name Tag & Status Icons */}
+      <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end">
+        <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white font-medium truncate max-w-[120px]">
+          {participant.name}
+        </div>
+        <div className="flex gap-1">
+            {!participant.hasAudio && (
+              <div className="bg-red-500/90 p-1.5 rounded-full shadow-sm">
+                <MicOff className="w-3 h-3 text-white"/>
+              </div>
+            )}
+        </div>
       </div>
     </div>
   )
@@ -63,13 +96,17 @@ export default function RoomPage() {
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
   const [isHost, setIsHost] = useState(false)
-  const [isReady, setIsReady] = useState(false)
-  const [showShareModal, setShowShareModal] = useState(false)
+  const [showLobbyMobile, setShowLobbyMobile] = useState(false)
+  const [showQR, setShowQR] = useState(false)
   
   // Meeting State
   const manager = MeetingManager.getInstance()
   const [meetingState, setMeetingState] = useState(manager.state)
   const localVideoRef = useRef<HTMLVideoElement>(null)
+  
+  // Track local media state for UI
+  const [localVideoEnabled, setLocalVideoEnabled] = useState(true)
+  const [localAudioEnabled, setLocalAudioEnabled] = useState(true)
 
   const meetingLink = typeof window !== 'undefined'
     ? `${window.location.origin}/${lang}/room/${roomId}`
@@ -92,7 +129,7 @@ export default function RoomPage() {
         console.log('Share canceled')
       }
     } else {
-      setShowShareModal(true)
+      setShowQR(true)
     }
   }
 
@@ -135,9 +172,16 @@ export default function RoomPage() {
     }
     fetchRoom()
     
-    // Subscribe to Manager updates
+    // Subscribe to Manager Updates
     const unsub = manager.subscribe(() => {
       setMeetingState({ ...manager.state })
+      
+      // Sync local controls state
+      const stream = manager.getLocalStream()
+      if (stream) {
+         setLocalVideoEnabled(stream.getVideoTracks()[0]?.enabled ?? false)
+         setLocalAudioEnabled(stream.getAudioTracks()[0]?.enabled ?? false)
+      }
     })
     return () => { unsub() }
   }, [roomId, lang, router])
@@ -217,90 +261,93 @@ export default function RoomPage() {
   // SETUP PHASE
   if (phase === 'setup') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-        <SiteHeader lang={lang} />
-        
-        {/* Main Content */}
-        <div className="flex flex-col items-center justify-center p-4 min-h-[calc(100vh-80px)]">
-          <Card className="w-full max-w-2xl bg-white/80 backdrop-blur-xl shadow-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
-              <CardTitle className="text-xl font-bold">{roomInfo.title}</CardTitle>
-              <p className="text-blue-100 text-sm">Created {new Date(roomInfo.createdAt).toLocaleDateString()}</p>
-            </CardHeader>
-            <CardContent className="grid md:grid-cols-2 gap-8 p-8">
-              {/* Video Preview */}
-              <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl aspect-video overflow-hidden relative shadow-inner">
-                <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-                <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-4">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-blue-50 flex flex-col">
+        {/* Minimal Header */}
+        <div className="bg-white/70 backdrop-blur-md border-b border-white/20 p-4 sticky top-0 z-10">
+           <div className="max-w-4xl mx-auto flex items-center justify-between">
+              <div className="flex items-center gap-2" onClick={handleGoHome}>
+                 <div className="bg-indigo-600 p-1.5 rounded-lg text-white"><VideoIcon className="w-4 h-4" /></div>
+                 <span className="font-semibold text-gray-800">{roomInfo.title}</span>
+              </div>
+              <Button variant="ghost" size="icon" onClick={handleGoHome}><X className="w-5 h-5 text-gray-500" /></Button>
+           </div>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <Card className="w-full max-w-4xl bg-white/80 backdrop-blur-xl shadow-2xl border-white/20 overflow-hidden">
+            <CardContent className="grid md:grid-cols-2 gap-0 p-0">
+              {/* Preview Area */}
+              <div className="relative bg-black aspect-[4/3] md:aspect-auto md:h-full order-first md:order-last flex items-center justify-center">
+                {localVideoEnabled ? (
+                    <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                ) : (
+                    <div className="flex flex-col items-center justify-center">
+                        <div className="w-24 h-24 rounded-full bg-gray-700 flex items-center justify-center mb-2">
+                             <span className="text-2xl text-white font-bold">{getInitials(name || 'Me')}</span>
+                        </div>
+                        <span className="text-gray-400 text-sm">Camera is off</span>
+                    </div>
+                )}
+                
+                <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 z-10">
                   <Button
-                    variant="secondary"
+                    variant={localAudioEnabled ? "secondary" : "destructive"}
                     size="icon"
+                    className="rounded-full w-12 h-12 transition-all"
                     onClick={() => manager.toggleAudio()}
-                    className={`backdrop-blur-sm hover:bg-white/30 border-white/20 text-white ${
-                      meetingState.isAudioMuted ? 'bg-red-500/30' : 'bg-white/20'
-                    }`}
                   >
-                    {meetingState.isAudioMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                    {localAudioEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
                   </Button>
                   <Button
-                    variant="secondary"
+                    variant={localVideoEnabled ? "secondary" : "destructive"}
                     size="icon"
+                    className="rounded-full w-12 h-12 transition-all"
                     onClick={() => manager.toggleVideo()}
-                    className={`backdrop-blur-sm hover:bg-white/30 border-white/20 text-white ${
-                      meetingState.isVideoMuted ? 'bg-red-500/30' : 'bg-white/20'
-                    }`}
                   >
-                    {meetingState.isVideoMuted ? <VideoOff className="h-5 w-5" /> : <VideoIcon className="h-5 w-5" />}
+                    {localVideoEnabled ? <VideoIcon className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
                   </Button>
-                </div>
-                <div className="absolute top-4 right-4 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                  PREVIEW
                 </div>
               </div>
 
-              {/* Form */}
-              <div className="space-y-6 flex flex-col justify-center">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Display Name</label>
-                  <Input
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="Your Name"
-                    className="h-12 text-lg"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Key className="h-4 w-4 text-blue-600" /> Host Password (Optional)
-                  </label>
-                  <Input
-                    type="password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="Enter room password"
-                    className="h-12"
-                  />
-                  <p className="text-xs text-gray-500 mt-2">
-                    Enter the room password to host the meeting. Password will be stored securely.
-                  </p>
+              {/* Form Area */}
+              <div className="p-6 md:p-8 flex flex-col justify-center space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to join?</h2>
+                  <p className="text-gray-500 text-sm">Configure your settings before entering.</p>
                 </div>
 
-                <div className="pt-2">
-                  <Button
-                    className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg"
-                    size="lg"
-                    onClick={handleJoin}
-                  >
-                    {password ? '🎥 Start Meeting as Host' : '👋 Ask to Join'}
-                  </Button>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Display Name</label>
+                    <Input
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="e.g. Alex Smith"
+                      className="h-12 text-lg bg-white/50"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                      <Key className="h-4 w-4 text-indigo-600" /> Host Password (Optional)
+                    </label>
+                    <Input
+                      type="password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter only if you are the host"
+                      className="h-12 bg-white/50"
+                    />
+                  </div>
                 </div>
-                
-                {!password && (
-                  <p className="text-xs text-center text-gray-500 bg-blue-50 p-3 rounded-lg">
-                    You will wait in the lobby until the host approves you.
-                  </p>
-                )}
+
+                <Button
+                  className="w-full h-14 text-lg font-semibold bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-500/20"
+                  size="lg"
+                  onClick={handleJoin}
+                >
+                  {password ? 'Start as Host' : 'Join Meeting'}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -312,245 +359,246 @@ export default function RoomPage() {
   // LOBBY PHASE
   if (phase === 'lobby') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-        <SiteHeader lang={lang} />
-        
-        {/* Main Content */}
-        <div className="flex flex-col items-center justify-center p-4 text-center min-h-[calc(100vh-80px)]">
-          <div className="bg-white/80 backdrop-blur-xl p-8 rounded-full shadow-2xl mb-6 animate-pulse border border-indigo-100">
-            <Users className="h-12 w-12 text-indigo-600" />
-          </div>
-          <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Waiting for Host Approval</h2>
-          <p className="text-gray-600 mb-8 max-w-md">
-            You are in the lobby for <strong className="text-indigo-600">{roomInfo.title}</strong>.
-            Please wait while the host lets you in.
-          </p>
-          
-          <Card className="bg-white/80 backdrop-blur-xl shadow-xl border-0 max-w-sm w-full mb-8">
-            <CardContent className="p-6">
-              <div className="flex justify-between items-center pb-3 mb-3 border-b border-blue-100">
-                <span className="text-gray-500 font-medium">Start Time</span>
-                <span className="text-gray-900 font-semibold">{new Date(roomInfo.createdAt).toLocaleTimeString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                 <span className="text-gray-500 font-medium">Duration</span>
-                 <span className="text-gray-900 font-semibold">{(Date.now() - roomInfo.createdAt) / 60000 | 0} mins</span>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Button
-            variant="outline"
-            onClick={() => { manager.leave(); setPhase('setup'); }}
-            className="bg-white/90 backdrop-blur-sm hover:bg-white transition-all duration-200 shadow-md border-gray-200 px-6 py-3"
-          >
-            Cancel
-          </Button>
-        </div>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 text-center">
+         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm w-full space-y-6">
+            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto animate-pulse">
+               <Users className="w-8 h-8 text-blue-500" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Waiting for Host</h2>
+              <p className="text-gray-500 mt-2 text-sm">You are in the lobby for <strong className="text-gray-800">{roomInfo.title}</strong>.</p>
+            </div>
+            <Button variant="outline" onClick={() => { manager.leave(); setPhase('setup'); }} className="w-full">
+               Cancel Request
+            </Button>
+         </div>
       </div>
     )
   }
 
   // MEETING PHASE
   return (
-    <div className="h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col">
-      {/* Header */}
-      <div className="bg-gray-800/90 backdrop-blur-sm p-3 flex justify-between items-center text-white shadow-xl">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            onClick={handleGoHome}
-            className="text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200 px-4 py-2"
-          >
-            <Home className="w-4 h-4 mr-2" />
-            <span>Leave</span>
-          </Button>
-          <div className="w-px h-6 bg-gray-600"></div>
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-lg">
-              <Users className="h-4 w-4" />
-            </div>
-            <div>
-              <span className="font-normal text-base text-gray-200">{roomInfo.title}</span>
-              <div className="flex items-center gap-2 mt-1">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${isHost ? 'bg-blue-600 text-white' : 'bg-purple-600 text-white'}`}>
-                  {isHost ? '🎥 Host' : '👋 Guest'}
+    <div className="fixed inset-0 bg-black flex flex-col touch-none">
+      {/* 1. Mobile-friendly Header */}
+      <div className="absolute top-0 left-0 right-0 z-50 p-4 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-start pointer-events-none">
+        <div className="flex flex-col pointer-events-auto">
+          <span className="text-white font-bold text-shadow-sm">{roomInfo.title}</span>
+          <span className="text-white/60 text-xs flex items-center gap-1">
+             <div className={`w-2 h-2 rounded-full ${isHost ? 'bg-blue-500' : 'bg-green-500'}`}></div>
+             {isHost ? 'Host' : 'Participant'}
+          </span>
+        </div>
+        
+        <div className="flex gap-2 pointer-events-auto">
+            {/* QR Code / Share Button */}
+            <Button
+                size="sm"
+                variant="secondary"
+                className="bg-white/10 backdrop-blur-md text-white border-white/10"
+                onClick={() => setShowQR(true)}
+            >
+                <QrCode className="w-4 h-4" />
+            </Button>
+
+            {/* Mobile Lobby Toggle (Host Only) */}
+            {isHost && (
+            <Button
+                size="sm"
+                variant="secondary"
+                className="bg-white/10 backdrop-blur-md text-white border-white/10 relative"
+                onClick={() => setShowLobbyMobile(!showLobbyMobile)}
+            >
+                <Users className="w-4 h-4 mr-1" />
+                {meetingState.waitingPeers.length > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
                 </span>
-              </div>
+                )}
+                <span className="hidden sm:inline">Lobby</span>
+            </Button>
+            )}
+        </div>
+      </div>
+
+      {/* 2. Video Grid - Responsive */}
+      <div className="flex-1 overflow-y-auto p-2 sm:p-4 mt-12 mb-20 scrollbar-hide">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 auto-rows-fr max-w-7xl mx-auto h-full content-center">
+          
+          {/* Local User */}
+          <div className="relative bg-gray-900 rounded-xl overflow-hidden aspect-video sm:aspect-auto border-2 border-indigo-500/50 shadow-lg flex items-center justify-center">
+            {localVideoEnabled ? (
+                <video
+                    ref={(ref) => { if(ref && manager.getLocalStream()) ref.srcObject = manager.getLocalStream() }}
+                    autoPlay muted playsInline
+                    className="w-full h-full object-cover transform scale-x-[-1]"
+                />
+            ) : (
+                <div className="flex flex-col items-center justify-center w-full h-full bg-gray-800">
+                   <div className="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg border-2 border-white/20">
+                      <span className="text-2xl font-bold text-white tracking-widest">{getInitials(name || 'Me')}</span>
+                   </div>
+                   <p className="mt-2 text-white/50 text-xs">You</p>
+                </div>
+            )}
+            
+            <div className="absolute bottom-2 left-2 text-white bg-black/60 px-2 py-0.5 rounded text-xs font-medium">
+              You
             </div>
           </div>
+
+          {/* Remote Participants */}
+          {meetingState.participants
+            .filter(p => isHost ? p.role !== 'host' : p.id !== manager.getPeerId())
+            .map(p => (
+              <ParticipantVideo key={p.id} participant={p} />
+          ))}
+
+          {/* Empty State / Waiting for others */}
+          {meetingState.participants.length <= 1 && (
+            <div className="flex flex-col items-center justify-center text-white/50 bg-white/5 rounded-xl border border-white/10 aspect-video sm:aspect-auto p-4 text-center">
+               <div className="bg-white/10 p-3 rounded-full mb-2">
+                 <QrCode className="w-6 h-6" />
+               </div>
+               <p className="text-sm">Scan to join</p>
+               <Button
+                 variant="link"
+                 className="text-blue-400 h-auto p-0 text-xs mt-1"
+                 onClick={() => setShowQR(true)}
+               >
+                 Show QR Code
+               </Button>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-4">
+      </div>
+
+      {/* 3. Host Lobby Modal (Mobile/Desktop Overlay) */}
+      {isHost && showLobbyMobile && (
+        <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+              <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                 <h3 className="font-bold text-gray-900">Waiting Room ({meetingState.waitingPeers.length})</h3>
+                 <Button variant="ghost" size="sm" onClick={() => setShowLobbyMobile(false)}><X className="w-4 h-4"/></Button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto p-2">
+                 {meetingState.waitingPeers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 text-sm">No one is waiting.</div>
+                 ) : (
+                   meetingState.waitingPeers.map(peer => (
+                     <div key={peer.peerId} className="flex items-center justify-between p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                           <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">
+                              {peer.name.charAt(0).toUpperCase()}
+                           </div>
+                           <span className="font-medium text-sm text-gray-900">{peer.name}</span>
+                        </div>
+                        <div className="flex gap-2">
+                           <Button size="icon" className="h-8 w-8 bg-green-500 hover:bg-green-600 text-white rounded-full" onClick={() => manager.approveParticipant(peer.peerId)}>
+                             <Check className="h-4 w-4" />
+                           </Button>
+                           <Button size="icon" variant="destructive" className="h-8 w-8 rounded-full" onClick={() => manager.rejectParticipant(peer.peerId)}>
+                             <X className="h-4 w-4" />
+                           </Button>
+                        </div>
+                     </div>
+                   ))
+                 )}
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* 4. QR Code Modal */}
+      {showQR && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowQR(false)}>
+           <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="p-4 border-b flex justify-between items-center">
+                 <h3 className="font-bold text-gray-900">Scan to Join</h3>
+                 <Button variant="ghost" size="sm" onClick={() => setShowQR(false)}><X className="w-4 h-4"/></Button>
+              </div>
+              <div className="p-6 flex flex-col items-center space-y-4">
+                 <div className="p-2 bg-white rounded-xl shadow-inner border">
+                    <QRCodeGenerator url={typeof window !== 'undefined' ? window.location.href : ''} size={200} />
+                 </div>
+                 <p className="text-center text-sm text-gray-500">
+                    Scan this QR code with your mobile camera to join <strong>{roomInfo.title}</strong> instantly.
+                 </p>
+                 <div className="flex w-full gap-2">
+                    <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                            navigator.clipboard.writeText(window.location.href);
+                            toast.success("Link copied");
+                        }}
+                    >
+                        <Copy className="w-4 h-4 mr-2" /> Copy Link
+                    </Button>
+                     <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                            if (navigator.share) {
+                                navigator.share({
+                                    title: `Join ${roomInfo.title}`,
+                                    url: window.location.href
+                                });
+                            } else {
+                                toast.info("Sharing not supported on this device");
+                            }
+                        }}
+                    >
+                        <Share2 className="w-4 h-4 mr-2" /> Share
+                    </Button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* 5. Bottom Controls - Floating & Safe Area */}
+      <div className="fixed bottom-6 left-4 right-4 z-50 flex justify-center pb-safe">
+        <div className="bg-black/80 backdrop-blur-xl border border-white/10 rounded-full px-6 py-3 shadow-2xl flex items-center gap-4 sm:gap-6">
           <Button
             variant="ghost"
-            onClick={handleShareMeeting}
-            className="text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200 px-4 py-2"
+            size="icon"
+            onClick={() => manager.toggleAudio()}
+            className={`h-12 w-12 rounded-full transition-all ${
+               !localAudioEnabled
+               ? 'bg-red-500/90 text-white hover:bg-red-600'
+               : 'bg-white/10 text-white hover:bg-white/20'
+            }`}
           >
-            <Share2 className="w-4 h-4 mr-2" />
-            <span>Share</span>
+             {!localAudioEnabled ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
           </Button>
-          <div className="text-right">
-            <div className="text-sm text-gray-400">Participants</div>
-            <div className="text-lg font-normal text-gray-200">
-              {isHost ? meetingState.participants.length : meetingState.participants.length + 1}
-            </div>
-          </div>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => manager.toggleVideo()}
+            className={`h-12 w-12 rounded-full transition-all ${
+               !localVideoEnabled
+               ? 'bg-red-500/90 text-white hover:bg-red-600'
+               : 'bg-white/10 text-white hover:bg-white/20'
+            }`}
+          >
+             {!localVideoEnabled ? <VideoOff className="h-5 w-5" /> : <VideoIcon className="h-5 w-5" />}
+          </Button>
+
+          <div className="w-px h-8 bg-white/20 mx-1"></div>
+
+          <Button
+            variant="destructive"
+            size="icon"
+            onClick={handleGoHome}
+            className="h-12 w-12 rounded-full bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
+          >
+             <PhoneOff className="h-5 w-5" />
+          </Button>
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="flex-1 p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto">
-        {/* Local Video */}
-        <div className="relative bg-black rounded-2xl overflow-hidden aspect-video border-2 border-blue-500 shadow-2xl">
-          <video
-            ref={(ref) => { if(ref && manager.getLocalStream()) ref.srcObject = manager.getLocalStream() }}
-            autoPlay muted playsInline
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute bottom-4 left-4 text-white bg-black/70 backdrop-blur-sm px-3 py-2 rounded-lg text-sm font-medium">
-            You ({name})
-          </div>
-          <div className="absolute top-4 left-4 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-            YOU
-          </div>
-        </div>
-
-        {/* Remote Participants */}
-        {meetingState.participants.filter(p => isHost ? p.role !== 'host' : p.id !== manager.getPeerId()).map(p => (
-          <div key={p.id} className="relative bg-black rounded-2xl overflow-hidden aspect-video shadow-2xl">
-            <ParticipantVideo key={p.id} participant={p} />
-          </div>
-        ))}
-      </div>
-
-      {/* Host Controls: Lobby List */}
-      {isHost && meetingState.waitingPeers.length > 0 && (
-        <div className="absolute top-24 right-6 w-80 bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden z-50 border border-white/20">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 font-bold flex justify-between items-center">
-            <span className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Lobby ({meetingState.waitingPeers.length})
-            </span>
-          </div>
-          <div className="max-h-72 overflow-y-auto">
-            {meetingState.waitingPeers.map(peer => (
-              <div key={peer.peerId} className="p-4 border-b border-gray-100 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 p-2 rounded-full">
-                    <User className="h-4 w-4 text-blue-600" />
-                  </div>
-                  <div>
-                    <span className="font-medium text-gray-900">{peer.name}</span>
-                    <div className="text-xs text-gray-500">Waiting to join</div>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="icon" className="h-9 w-9 bg-green-500 hover:bg-green-600 text-white rounded-lg" onClick={() => manager.approveParticipant(peer.peerId)}>
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button size="icon" className="h-9 w-9 bg-red-500 hover:bg-red-600 text-white rounded-lg" onClick={() => manager.rejectParticipant(peer.peerId)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Footer Controls */}
-      <div className="bg-gray-800/90 backdrop-blur-sm p-6 flex justify-center gap-6 shadow-xl">
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => manager.toggleAudio()}
-          className={`h-14 w-14 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full ${
-            meetingState.isAudioMuted ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/30' : 'bg-white/10'
-          }`}
-        >
-           {meetingState.isAudioMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
-        </Button>
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={() => manager.toggleVideo()}
-          className={`h-14 w-14 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full ${
-            meetingState.isVideoMuted ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/30' : 'bg-white/10'
-          }`}
-        >
-           {meetingState.isVideoMuted ? <VideoOff className="h-6 w-6" /> : <VideoIcon className="h-6 w-6" />}
-        </Button>
-        <Button
-          variant="destructive"
-          size="icon"
-          onClick={handleGoHome}
-          className="h-14 w-14 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg"
-        >
-           <PhoneOff className="h-6 w-6" />
-        </Button>
-      </div>
-
-      {/* Share Modal */}
-      {showShareModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md bg-white/95 backdrop-blur-xl shadow-2xl border-0">
-            <CardHeader className="text-center pb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Share2 className="w-6 h-6 text-blue-600" />
-              </div>
-              <CardTitle className="text-xl font-bold">Share Meeting</CardTitle>
-              <p className="text-gray-500 text-sm">
-                Invite others to join "{roomInfo?.title}"
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-xs text-gray-500 mb-2">Meeting Link</p>
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={meetingLink}
-                    readOnly
-                    className="bg-white border-gray-200 text-sm"
-                  />
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    onClick={handleCopyLink}
-                    className="shrink-0"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="flex flex-col items-center">
-                <p className="text-xs text-gray-500 mb-4">Scan QR Code</p>
-                <QRCodeGenerator
-                  url={meetingLink}
-                  size={200}
-                  scanText="Scan with mobile camera to join"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowShareModal(false)}
-                  className="flex-1"
-                >
-                  Close
-                </Button>
-                <Button
-                  onClick={handleCopyLink}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                >
-                  Copy Link
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   )
 }
