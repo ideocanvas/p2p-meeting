@@ -64,7 +64,7 @@ function JoinPageContent() {
             await meetingManager.joinRoom(data.roomId, participantName || "Anonymous");
           } else {
             handleLog({ timestamp: new Date(), level: "error", message: "Failed to lookup short code", details: data.error });
-            setError("Invalid meeting code - please check and try again");
+            setError(t("errors.invalidMeetingCode"));
             return;
           }
         } else {
@@ -74,7 +74,7 @@ function JoinPageContent() {
         }
       } catch (err) {
         console.error("Failed to join meeting:", err);
-        setError("Failed to join meeting");
+        setError(t("errors.failedToJoinMeeting"));
       }
     };
 
@@ -83,7 +83,7 @@ function JoinPageContent() {
       joinMeeting();
     }).catch((err: unknown) => {
       console.error("Failed to enable media:", err);
-      setError("Failed to enable camera and microphone");
+      setError(t("errors.failedToEnableMedia"));
     });
 
     return () => {
@@ -129,13 +129,13 @@ function JoinPageContent() {
             <div className="max-w-md mx-auto">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Your Name
+                  {t("join.yourName")}
                 </label>
                 <input
                   type="text"
                   value={participantName}
                   onChange={(e) => setParticipantName(e.target.value)}
-                  placeholder="Enter your name"
+                  placeholder={t("join.namePlaceholder")}
                   className="w-full px-4 py-3 text-center border-2 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                 />
               </div>
@@ -239,14 +239,14 @@ function JoinPageContent() {
         {/* Connected and in meeting */}
         {(connectionState === "connected" || connectionState === "active") && (
           <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4">Meeting in Progress</h3>
+            <h3 className="text-lg font-semibold mb-4">{t("room.meetingInProgress")}</h3>
             
             {/* Video preview area */}
             <div className="bg-gray-900 rounded-lg p-4 mb-4">
               <VideoPlayer
                 stream={localStream}
                 isLocal={true}
-                name="You"
+                name={t("room.you")}
                 isVideoEnabled={isVideoEnabled} // Pass local video state
               />
             </div>
@@ -283,13 +283,13 @@ function JoinPageContent() {
 
             {/* Participants list */}
             <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">Participants ({participants.length + 1})</h4>
+              <h4 className="font-semibold mb-3">{t("room.participants")} ({participants.length + 1})</h4>
               <div className="space-y-2">
                 <div className="flex items-center space-x-3 p-2 bg-white rounded">
                   <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-blue-600 font-semibold text-sm">You</span>
+                    <span className="text-blue-600 font-semibold text-sm">{t("room.you")}</span>
                   </div>
-                  <span className="font-medium">{participantName || "You"}</span>
+                  <span className="font-medium">{participantName || t("room.you")}</span>
                 </div>
                 {participants.map((participant) => (
                   <div key={participant.id} className="flex items-center space-x-3 p-2 bg-white rounded">

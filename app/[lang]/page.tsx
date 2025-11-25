@@ -21,16 +21,16 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
             </span>
-            Secure P2P Video Conferencing
+            {dict.home.secureP2PVideoConferencing}
           </div>
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-gray-900 mb-8">
-            Video calls, <br className="hidden md:block" />
+            {dict.home.videoCalls} <br className="hidden md:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-              Simplified & Secure
+              {dict.home.simplifiedSecure}
             </span>
           </h1>
           <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-            {dict.home.heroDescription} No servers, no data collection, just you and your team.
+            {dict.home.heroDescription} {dict.home.noServers}
           </p>
           
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -51,17 +51,17 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
         <div className="grid md:grid-cols-3 gap-8 mb-24">
           <FeatureCard 
             icon={<Shield className="w-8 h-8 text-indigo-600" />}
-            title="End-to-End Privacy"
+            title={dict.home.endToEndPrivacy}
             description={dict.home.featurePrivateDesc}
           />
           <FeatureCard 
             icon={<Zap className="w-8 h-8 text-amber-500" />}
-            title="Lightning Fast"
-            description="Direct Peer-to-Peer connection ensures the lowest possible latency for your calls."
+            title={dict.home.lightningFast}
+            description={dict.home.lightningFastDesc}
           />
           <FeatureCard 
             icon={<Users className="w-8 h-8 text-emerald-500" />}
-            title="Unlimited Access"
+            title={dict.home.unlimitedAccess}
             description={dict.home.featureNoLimitsDesc}
           />
         </div>
@@ -72,14 +72,13 @@ export default async function HomePage({ params }: { params: Promise<{ lang: str
           <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-purple-600/30 rounded-full blur-3xl"></div>
           
           <div className="relative z-10 p-12 md:p-16 text-center">
-            <h3 className="text-3xl font-bold mb-6">Manage Your Meeting Rooms</h3>
+            <h3 className="text-3xl font-bold mb-6">{dict.home.manageMeetingRooms}</h3>
             <p className="text-gray-300 mb-8 max-w-2xl mx-auto text-lg">
-              Create persistent meeting rooms with fixed links. Perfect for recurring team syncs, 
-              client meetings, or family hangouts.
+              {dict.home.manageMeetingRoomsDesc}
             </p>
             <Link href={`/${lang}/dashboard`}>
               <Button size="lg" variant="secondary" className="h-12 px-8 rounded-full font-semibold">
-                Go to Dashboard
+                {dict.home.goToDashboard}
               </Button>
             </Link>
           </div>

@@ -5,9 +5,16 @@ import { Video, LayoutDashboard, Plus, LogIn, Home } from 'lucide-react'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { Button } from '@/components/ui/button'
 import { usePathname } from 'next/navigation'
+import { getTranslations } from '@/lib/client-i18n'
+import { useEffect, useState } from 'react'
 
 export function SiteHeader({ lang }: { lang: string }) {
   const pathname = usePathname()
+  const [t, setT] = useState(() => getTranslations(lang as 'en' | 'zh'))
+  
+  useEffect(() => {
+    setT(() => getTranslations(lang as 'en' | 'zh'))
+  }, [lang])
   
   const isActive = (path: string) => pathname?.endsWith(path)
 
@@ -28,13 +35,13 @@ export function SiteHeader({ lang }: { lang: string }) {
             <Link href={`/${lang}`}>
               <Button variant={isActive(`/${lang}`) ? "secondary" : "ghost"} size="sm" className="gap-2">
                 <Home className="w-4 h-4" />
-                Home
+                {t("navigation.home")}
               </Button>
             </Link>
             <Link href={`/${lang}/dashboard`}>
               <Button variant={isActive('/dashboard') ? "secondary" : "ghost"} size="sm" className="gap-2">
                 <LayoutDashboard className="w-4 h-4" />
-                Dashboard
+                {t("navigation.dashboard")}
               </Button>
             </Link>
           </nav>
@@ -45,13 +52,13 @@ export function SiteHeader({ lang }: { lang: string }) {
              <Link href={`/${lang}/join`}>
               <Button variant="ghost" size="sm" className="gap-2">
                 <LogIn className="w-4 h-4" />
-                Join
+                {t("navigation.join")}
               </Button>
             </Link>
              <Link href={`/${lang}/create`}>
               <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20">
                 <Plus className="w-4 h-4" />
-                New Room
+                {t("navigation.newRoom")}
               </Button>
             </Link>
           </div>

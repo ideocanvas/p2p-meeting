@@ -16,6 +16,7 @@ import { secureStorage } from '@/lib/secure-storage'
 import { QRCodeGenerator } from '@/components/qr-code-generator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { VideoPlayer } from '@/components/video-player'
+import { getTranslations } from '@/lib/client-i18n'
 
 const getInitials = (name: string) => {
   return (name || 'User')
@@ -46,6 +47,11 @@ export default function RoomPage() {
   const router = useRouter()
   const roomId = params.roomId as string
   const lang = params.lang as string
+  const [t, setT] = useState(() => getTranslations(lang as 'en' | 'zh'))
+  
+  useEffect(() => {
+    setT(() => getTranslations(lang as 'en' | 'zh'))
+  }, [lang])
 
   // State
   const [roomInfo, setRoomInfo] = useState<PublicRoomInfo | null>(null)
@@ -81,8 +87,8 @@ export default function RoomPage() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Join ${roomInfo?.title || 'Meeting'}`,
-          text: `Join my meeting room: ${roomInfo?.title || 'Meeting'}`,
+          title: `${t("room.join")} ${roomInfo?.title || t("room.title")}`,
+          text: `${t("room.joinMyMeeting")} ${roomInfo?.title || t("room.title")}`,
           url: meetingLink
         })
       } catch (error) {
@@ -96,9 +102,9 @@ export default function RoomPage() {
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(meetingLink)
-      toast.success('Meeting link copied to clipboard')
+      toast.success(t("room.meetingLinkCopied"))
     } catch (error) {
-      toast.error('Failed to copy link')
+      toast.error(t("room.failedToCopyLink"))
     }
   }
 
@@ -115,7 +121,7 @@ export default function RoomPage() {
       const res = await fetch(`/api/rooms/${roomId}`)
       const data = await res.json()
       if (!data.success) {
-        toast.error('Room not found')
+        toast.error(t("errors.roomNotFound"))
         router.push(`/${lang}`)
         return
       }
@@ -165,7 +171,7 @@ export default function RoomPage() {
 
   // 3. Handle Join Logic
   const handleJoin = async () => {
-    if (!name) return toast.error('Name required')
+    if (!name) return toast.error(t("room.nameRequired"))
 
     // Store user name for future use
     await secureStorage.storeUserName(name)
@@ -190,14 +196,14 @@ export default function RoomPage() {
         manager.startHosting(roomId, password, name, false)
         return
       } else {
-        toast.error('Incorrect password')
+        toast.error(t("room.incorrectPassword"))
         return
       }
     }
 
     // Join as Participant
     if (!roomInfo?.hostConnected && !roomInfo?.id /* Basic check if loaded */) {
-      toast.error('Host is not online yet. Cannot join lobby.')
+      toast.error(t("room.hostNotOnline"))
       return
     }
 
@@ -217,7 +223,7 @@ export default function RoomPage() {
       manager.joinRoom(data.hostPeerId, name)
       setPhase('lobby')
     } else {
-      toast.error("Waiting for host to come online...")
+      toast.error(t("room.waitingForHostOnline"))
     }
   }
 
@@ -237,7 +243,7 @@ export default function RoomPage() {
 
   // --- RENDERERS ---
 
-  if (!roomInfo) return <div className="flex h-screen items-center justify-center">Loading Room...</div>
+  if (!roomInfo) return <div className="flex h-screen items-center justify-center">{t("common.loading")}</div>
 
   // SETUP PHASE
   if (phase === 'setup') {
@@ -262,7 +268,7 @@ export default function RoomPage() {
                 <VideoPlayer
                   stream={localVideoRef.current ? manager.getLocalStream() : null}
                   isLocal={true}
-                  name={name || 'Me'}
+                  name={name || t("room.you")}
                   className="aspect-[4/3] md:aspect-auto md:h-full"
                 />
                 
@@ -289,30 +295,30 @@ export default function RoomPage() {
               {/* Form Area */}
               <div className="p-6 md:p-8 flex flex-col justify-center space-y-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Ready to join?</h2>
-                  <p className="text-gray-500 text-sm">Configure your settings before entering.</p>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">{t("room.readyToJoin")}</h2>
+                  <p className="text-gray-500 text-sm">{t("room.configureSettings")}</p>
                 </div>
 
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Display Name</label>
+                    <label className="text-sm font-medium text-gray-700">{t("room.displayName")}</label>
                     <Input
                       value={name}
                       onChange={e => setName(e.target.value)}
-                      placeholder="e.g. Alex Smith"
+                      placeholder={t("room.namePlaceholder")}
                       className="h-12 text-lg bg-white/50"
                     />
                   </div>
                   
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                      <Key className="h-4 w-4 text-indigo-600" /> Host Password (Optional)
+                      <Key className="h-4 w-4 text-indigo-600" /> {t("room.hostPassword")}
                     </label>
                     <Input
                       type="password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      placeholder="Enter only if you are the host"
+                      placeholder={t("room.hostPasswordPlaceholder")}
                       className="h-12 bg-white/50"
                     />
                   </div>
@@ -323,7 +329,7 @@ export default function RoomPage() {
                   size="lg"
                   onClick={handleJoin}
                 >
-                  {password ? 'Start as Host' : 'Join Meeting'}
+                  {password ? t("room.startAsHost") : t("room.joinMeeting")}
                 </Button>
               </div>
             </CardContent>
@@ -342,11 +348,11 @@ export default function RoomPage() {
                <Users className="w-8 h-8 text-blue-500" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Waiting for Host</h2>
-              <p className="text-gray-500 mt-2 text-sm">You are in the lobby for <strong className="text-gray-800">{roomInfo.title}</strong>.</p>
+              <h2 className="text-xl font-bold text-gray-900">{t("room.waitingForHost")}</h2>
+              <p className="text-gray-500 mt-2 text-sm">{t("room.waitingForHostText")} <strong className="text-gray-800">{roomInfo.title}</strong>.</p>
             </div>
             <Button variant="outline" onClick={() => { manager.leave(); setPhase('setup'); }} className="w-full">
-               Cancel Request
+               {t("room.cancelRequest")}
             </Button>
          </div>
       </div>
@@ -362,7 +368,7 @@ export default function RoomPage() {
           <span className="text-white font-bold text-shadow-sm">{roomInfo.title}</span>
           <span className="text-white/60 text-xs flex items-center gap-1">
              <div className={`w-2 h-2 rounded-full ${isHost ? 'bg-blue-500' : 'bg-green-500'}`}></div>
-             {isHost ? 'Host' : 'Participant'}
+             {isHost ? t("room.host") : t("room.participant")}
           </span>
         </div>
         
@@ -412,7 +418,7 @@ export default function RoomPage() {
                 <VideoPlayer
                   stream={manager.getLocalStream()}
                   isLocal={true}
-                  name="You"
+                  name={t("room.you")}
                   className={`${meetingState.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2 aspect-auto' : 'aspect-video'}`}
                   isScreenSharing={meetingState.isScreenSharing}
                   isVideoEnabled={localVideoEnabled} // Pass local toggle state
@@ -428,8 +434,8 @@ export default function RoomPage() {
                 {/* Empty State */}
                 {meetingState.participants.length <= 1 && (
                     <div className="flex flex-col items-center justify-center text-white/30 bg-white/5 rounded-xl border border-white/5 aspect-video p-4 text-center border-dashed">
-                        <p className="text-sm">Waiting for others...</p>
-                        <Button variant="link" className="text-blue-400 text-xs h-auto p-0" onClick={() => setShowQR(true)}>Invite people</Button>
+                        <p className="text-sm">{t("room.waitingForOthers")}</p>
+                        <Button variant="link" className="text-blue-400 text-xs h-auto p-0" onClick={() => setShowQR(true)}>{t("room.invitePeople")}</Button>
                     </div>
                 )}
              </div>
@@ -439,14 +445,14 @@ export default function RoomPage() {
           <div className={`fixed inset-y-0 right-0 w-full sm:w-80 bg-gray-900 border-l border-gray-800 transform transition-transform duration-300 z-40 flex flex-col ${showChat ? 'translate-x-0' : 'translate-x-full'}`}>
              <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/95">
                 <h3 className="font-bold text-white flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4"/> Chat
+                    <MessageSquare className="w-4 h-4"/> {t("room.chat")}
                 </h3>
                 <Button variant="ghost" size="sm" onClick={() => setShowChat(false)}><X className="w-4 h-4 text-gray-400"/></Button>
              </div>
              
              <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={chatScrollRef}>
                 {meetingState.messages.length === 0 ? (
-                    <div className="text-center text-gray-600 text-sm py-10">No messages yet.</div>
+                    <div className="text-center text-gray-600 text-sm py-10">{t("room.noMessages")}</div>
                 ) : (
                     meetingState.messages.map((msg) => (
                         <div key={msg.id} className={`flex flex-col ${msg.senderId === manager.getPeerId() ? 'items-end' : 'items-start'}`}>
@@ -474,7 +480,7 @@ export default function RoomPage() {
                      <Input
                         value={chatInput}
                         onChange={e => setChatInput(e.target.value)}
-                        placeholder="Type a message..."
+                        placeholder={t("room.typeMessage")}
                         className="bg-gray-800 border-gray-700 text-white focus-visible:ring-blue-500"
                      />
                      <Button type="submit" size="icon" className="bg-blue-600 hover:bg-blue-700">
@@ -490,12 +496,12 @@ export default function RoomPage() {
         <div className="absolute inset-0 z-40 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
               <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                 <h3 className="font-bold text-gray-900">Waiting Room ({meetingState.waitingPeers.length})</h3>
+                 <h3 className="font-bold text-gray-900">{t("room.waitingRoom")} ({meetingState.waitingPeers.length})</h3>
                  <Button variant="ghost" size="sm" onClick={() => setShowLobbyMobile(false)}><X className="w-4 h-4"/></Button>
               </div>
               <div className="max-h-[60vh] overflow-y-auto p-2">
                  {meetingState.waitingPeers.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 text-sm">No one is waiting.</div>
+                    <div className="text-center py-8 text-gray-500 text-sm">{t("room.noOneWaiting")}</div>
                  ) : (
                    meetingState.waitingPeers.map(peer => (
                      <div key={peer.peerId} className="flex items-center justify-between p-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 rounded-lg">
@@ -526,7 +532,7 @@ export default function RoomPage() {
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowQR(false)}>
            <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="p-4 border-b flex justify-between items-center">
-                 <h3 className="font-bold text-gray-900">Scan to Join</h3>
+                 <h3 className="font-bold text-gray-900">{t("room.scanToJoin")}</h3>
                  <Button variant="ghost" size="sm" onClick={() => setShowQR(false)}><X className="w-4 h-4"/></Button>
               </div>
               <div className="p-6 flex flex-col items-center space-y-4">
@@ -534,7 +540,7 @@ export default function RoomPage() {
                     <QRCodeGenerator url={typeof window !== 'undefined' ? window.location.href : ''} size={200} />
                  </div>
                  <p className="text-center text-sm text-gray-500">
-                    Scan this QR code with your mobile camera to join <strong>{roomInfo.title}</strong> instantly.
+                    {t("room.scanDescription")} <strong>{roomInfo.title}</strong> {t("room.instantly")}
                  </p>
                  <div className="flex w-full gap-2">
                     <Button
@@ -542,10 +548,10 @@ export default function RoomPage() {
                         className="flex-1"
                         onClick={() => {
                             navigator.clipboard.writeText(window.location.href);
-                            toast.success("Link copied");
+                            toast.success(t("room.linkCopied"));
                         }}
                     >
-                        <Copy className="w-4 h-4 mr-2" /> Copy Link
+                        <Copy className="w-4 h-4 mr-2" /> {t("room.copyLink")}
                     </Button>
                      <Button
                         variant="outline"
@@ -557,11 +563,11 @@ export default function RoomPage() {
                                     url: window.location.href
                                 });
                             } else {
-                                toast.info("Sharing not supported on this device");
+                                toast.info(t("room.sharingNotSupported"));
                             }
                         }}
                     >
-                        <Share2 className="w-4 h-4 mr-2" /> Share
+                        <Share2 className="w-4 h-4 mr-2" /> {t("room.share")}
                     </Button>
                  </div>
               </div>

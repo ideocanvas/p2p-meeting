@@ -45,14 +45,14 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
 
   const handleParticipantJoined = (participant: Participant) => {
     setParticipants((prev) => [...prev, participant]);
-    toast.success(`${participant.name} joined the meeting`);
+    toast.success(`${participant.name} ${t("room.participantJoined")}`);
   };
 
   const handleParticipantLeft = (participantId: string) => {
     setParticipants((prev) => prev.filter(p => p.id !== participantId));
     const participant = participants.find(p => p.id === participantId);
     if (participant) {
-      toast.success(`${participant.name} left the meeting`);
+      toast.success(`${participant.name} ${t("room.participantLeft")}`);
     }
   };
 
@@ -108,13 +108,13 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
         // Fallback to using room ID if short code generation fails
         setShortCode(roomId);
         handleLog({ timestamp: new Date(), level: "warning", message: t("host.shortCodeFailed"), details: data.error });
-        handleLog({ timestamp: new Date(), level: "info", message: "Falling back to using room ID as meeting code" });
+        handleLog({ timestamp: new Date(), level: "info", message: t("room.fallbackToRoomId") });
       }
     } catch (err) {
       // Fallback to using room ID if API call fails
       setShortCode(roomId);
       handleLog({ timestamp: new Date(), level: "warning", message: t("host.registerFailed"), details: String(err) });
-      handleLog({ timestamp: new Date(), level: "info", message: "Falling back to using room ID as meeting code" });
+      handleLog({ timestamp: new Date(), level: "info", message: t("room.fallbackToRoomId") });
     }
   };
 

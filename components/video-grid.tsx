@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Participant } from "@/lib/types";
 import { Video, VideoOff, Mic, MicOff, Users } from "lucide-react";
 import { VideoPlayer } from "@/components/video-player";
+import { getTranslations } from "@/lib/client-i18n";
 
 interface VideoGridProps {
   participants: Participant[];
@@ -14,6 +15,7 @@ interface VideoGridProps {
   onToggleAudio?: () => void;
   onToggleVideo?: () => void;
   className?: string;
+  lang?: string;
 }
 
 interface VideoTileProps {
@@ -31,7 +33,7 @@ interface VideoTileProps {
   isLocal?: boolean;
 }
 
-function VideoTile({ participant, stream, isLocal = false }: VideoTileProps) {
+function VideoTile({ participant, stream, isLocal = false, t }: VideoTileProps & { t: (key: string) => string }) {
   // Determine if video is enabled based on participant object
   const isVideoEnabled = isLocal
     ? participant.hasVideo // For local, this is passed correctly in the array below
@@ -42,7 +44,7 @@ function VideoTile({ participant, stream, isLocal = false }: VideoTileProps) {
       <VideoPlayer
         stream={stream || null}
         isLocal={isLocal}
-        name={isLocal ? "You" : participant.name}
+        name={isLocal ? t("room.you") : participant.name}
         className="w-full h-full"
         hasAudio={participant.hasAudio}
         isVideoEnabled={isVideoEnabled} // Pass the status
@@ -71,7 +73,14 @@ export function VideoGrid({
   onToggleAudio,
   onToggleVideo,
   className = "",
+  lang = "en",
 }: VideoGridProps) {
+  const [t, setT] = useState(() => getTranslations(lang as 'en' | 'zh'));
+  
+  useEffect(() => {
+    setT(() => getTranslations(lang as 'en' | 'zh'));
+  }, [lang]);
+
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
   const [spotlightParticipant, setSpotlightParticipant] = useState<Participant | {
     id: string;
@@ -87,7 +96,7 @@ export function VideoGrid({
   const allParticipants = [
     {
       id: "local",
-      name: localParticipantName,
+      name: t("room.you"),
       role: "host" as const,
       status: "connected" as const,
       hasVideo: isVideoEnabled,
@@ -116,6 +125,7 @@ export function VideoGrid({
             participant={spotlightParticipant}
             stream={spotlightParticipant.id === "local" ? localStream : (spotlightParticipant.stream || null)}
             isLocal={spotlightParticipant.id === "local"}
+            t={t}
           />
         </div>
 
@@ -124,13 +134,13 @@ export function VideoGrid({
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-white font-semibold flex items-center space-x-2">
               <Users className="w-4 h-4" />
-              <span>Participants ({allParticipants.length})</span>
+              <span>{t("room.participants")} ({allParticipants.length})</span>
             </h3>
             <button
               onClick={() => setLayout("grid")}
               className="text-gray-400 hover:text-white text-sm"
             >
-              Grid View
+              {t("room.gridView")}
             </button>
           </div>
           <div className="flex space-x-2 overflow-x-auto pb-2">
@@ -148,6 +158,7 @@ export function VideoGrid({
                   participant={participant}
                   stream={participant.id === "local" ? localStream : (participant.stream || null)}
                   isLocal={participant.id === "local"}
+                  t={t}
                 />
               </button>
             ))}
@@ -204,6 +215,7 @@ export function VideoGrid({
               participant={participant}
               stream={participant.id === "local" ? localStream : (participant.stream || null)}
               isLocal={participant.id === "local"}
+              t={t}
             />
           </div>
         ))}
@@ -214,7 +226,7 @@ export function VideoGrid({
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2 text-gray-400">
             <Users className="w-4 h-4" />
-            <span className="text-sm">{allParticipants.length} participants</span>
+            <span className="text-sm">{allParticipants.length} {t("room.participants")}</span>
           </div>
           {allParticipants.length > 1 && (
             <button
@@ -224,7 +236,7 @@ export function VideoGrid({
               }}
               className="text-gray-400 hover:text-white text-sm"
             >
-              Spotlight View
+              {t("room.spotlightView")}
             </button>
           )}
         </div>

@@ -9,9 +9,11 @@ import { toast } from 'sonner'
 import { SiteHeader } from '@/components/site-header'
 import { Plus, Users, Video, Copy, Share2, Clock, Trash2, Calendar, ArrowRight } from 'lucide-react'
 import { secureStorage } from '@/lib/secure-storage'
+import { getTranslations } from '@/lib/client-i18n'
 
 export default function DashboardPage({ params }: { params: Promise<{ lang: string }> }) {
   const [lang, setLang] = useState('en')
+  const [t, setT] = useState(() => getTranslations('en' as 'en' | 'zh'))
   const [rooms, setRooms] = useState<LocalRoomData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
@@ -19,7 +21,9 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
   useEffect(() => {
     const loadParams = async () => {
       const resolvedParams = await params
-      setLang(resolvedParams.lang)
+      const validLang = resolvedParams.lang === "zh" ? "zh" : "en"
+      setLang(validLang)
+      setT(() => getTranslations(validLang))
     }
     loadParams()
   }, [params])
@@ -35,7 +39,7 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
       setRooms(storedRooms)
     } catch (error) {
       console.error('Error loading rooms:', error)
-      toast.error('Failed to load rooms')
+      toast.error(t("dashboard.failedToLoadRooms"))
     } finally {
       setIsLoading(false)
     }
@@ -45,20 +49,20 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
     const roomLink = `${window.location.origin}/${lang}/room/${roomId}`
     try {
       await navigator.clipboard.writeText(roomLink)
-      toast.success('Link copied')
+      toast.success(t("dashboard.linkCopied"))
     } catch (err) {
-      toast.error('Failed to copy')
+      toast.error(t("dashboard.failedToCopy"))
     }
   }
 
   const handleDeleteRoom = async (roomId: string) => {
-    if (!window.confirm('Delete this room?')) return
+    if (!window.confirm(t("dashboard.deleteRoomConfirm"))) return
     try {
       await secureStorage.removeRoom(roomId)
       setRooms(rooms.filter(room => room.roomId !== roomId))
-      toast.success('Room deleted')
+      toast.success(t("dashboard.roomDeleted"))
     } catch (error) {
-      toast.error('Failed to delete')
+      toast.error(t("dashboard.failedToDelete"))
     }
   }
 
@@ -69,12 +73,12 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
-            <p className="text-gray-500 mt-2">Manage your persistent meeting rooms</p>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{t("dashboard.title")}</h1>
+            <p className="text-gray-500 mt-2">{t("dashboard.subtitle")}</p>
           </div>
           <Button onClick={() => router.push(`/${lang}/create`)} size="lg" className="bg-blue-600 hover:bg-blue-700 shadow-md">
             <Plus className="w-5 h-5 mr-2" />
-            Create New Room
+            {t("dashboard.createNewRoom")}
           </Button>
         </div>
 
@@ -89,12 +93,12 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
               <Calendar className="w-10 h-10 text-blue-500" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">No rooms yet</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">{t("dashboard.noRoomsYet")}</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">
-              Create your first room to get started. Share the link once, use it forever.
+              {t("dashboard.createFirstRoom")}
             </p>
             <Button onClick={() => router.push(`/${lang}/create`)} variant="outline" className="border-2">
-              Create Room
+              {t("dashboard.createRoom")}
             </Button>
           </div>
         ) : (
@@ -108,10 +112,10 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
                         <Video className="w-6 h-6 text-indigo-600" />
                       </div>
                       <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" onClick={() => handleCopyLink(room.roomId)} title="Copy Link">
+                        <Button variant="ghost" size="icon" onClick={() => handleCopyLink(room.roomId)} title={t("dashboard.copyLink")}>
                           <Copy className="w-4 h-4 text-gray-500" />
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRoom(room.roomId)} title="Delete Room">
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRoom(room.roomId)} title={t("dashboard.deleteRoom")}>
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </Button>
                       </div>
@@ -120,7 +124,7 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
                     <h3 className="text-xl font-bold text-gray-900 mb-1 truncate pr-4">{room.title}</h3>
                     <div className="flex items-center text-sm text-gray-500 gap-2">
                       <Clock className="w-3 h-3" />
-                      <span>Last used {new Date(room.lastAccessed).toLocaleDateString()}</span>
+                      <span>{t("dashboard.lastUsed")} {new Date(room.lastAccessed).toLocaleDateString()}</span>
                     </div>
                   </div>
                   
@@ -129,7 +133,7 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
                       className="w-full bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm"
                       onClick={() => router.push(`/${lang}/room/${room.roomId}`)}
                     >
-                      Join Room <ArrowRight className="w-4 h-4 ml-2" />
+                      {t("dashboard.joinRoom")} <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
                     <Button 
                       variant="outline" 

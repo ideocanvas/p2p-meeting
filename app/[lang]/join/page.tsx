@@ -10,9 +10,11 @@ import { meetingService } from '@/lib/meeting-service'
 import { toast } from 'sonner'
 import { LogIn, Loader2, User } from 'lucide-react'
 import { SiteHeader } from '@/components/site-header'
+import { getTranslations } from '@/lib/client-i18n'
 
 export default function JoinRoomPage({ params }: { params: Promise<{ lang: string }> }) {
   const [lang, setLang] = useState('en')
+  const [t, setT] = useState(() => getTranslations('en' as 'en' | 'zh'))
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isJoining, setIsJoining] = useState(false)
@@ -20,12 +22,16 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
   const [name, setName] = useState('')
 
   useEffect(() => {
-    params.then(p => setLang(p.lang))
+    params.then(p => {
+      const validLang = p.lang === "zh" ? "zh" : "en"
+      setLang(validLang)
+      setT(() => getTranslations(validLang))
+    })
   }, [params])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!roomId || !name) return toast.error('Please fill in all fields')
+    if (!roomId || !name) return toast.error(t('errors.pleaseFillAllFields'))
     
     setIsJoining(true)
     try {
@@ -37,7 +43,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
       }
       router.push(`/${lang}/room/${roomId}`)
     } catch (error) {
-      toast.error('Room not found or invalid')
+      toast.error(t('errors.roomNotFound'))
     } finally {
       setIsJoining(false)
     }
@@ -53,18 +59,18 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
             <div className="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center mb-4 text-indigo-600">
               <LogIn className="w-6 h-6" />
             </div>
-            <CardTitle className="text-2xl font-bold">Join Meeting</CardTitle>
+            <CardTitle className="text-2xl font-bold">{t("join.title")}</CardTitle>
             <CardDescription className="text-gray-500">
-              Enter the room ID and your name to connect.
+              {t("join.description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="roomId">Room ID</Label>
+                <Label htmlFor="roomId">{t("join.roomId")}</Label>
                 <Input
                   id="roomId"
-                  placeholder="e.g. X8J2P9"
+                  placeholder={t("join.roomIdPlaceholder")}
                   value={roomId}
                   onChange={e => setRoomId(e.target.value.toUpperCase())}
                   required
@@ -72,12 +78,12 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="name">Your Name</Label>
+                <Label htmlFor="name">{t("join.yourName")}</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                   <Input
                     id="name"
-                    placeholder="Jane Doe"
+                    placeholder={t("join.namePlaceholder")}
                     value={name}
                     onChange={e => setName(e.target.value)}
                     required
@@ -87,7 +93,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
               </div>
 
               <Button type="submit" className="w-full h-11 text-base bg-indigo-600 hover:bg-indigo-700" disabled={isJoining}>
-                {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Join Room'}
+                {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t("join.joinRoom")}
               </Button>
             </form>
           </CardContent>
