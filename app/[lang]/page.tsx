@@ -1,9 +1,9 @@
-import { Video, Shield, Zap, Users, ArrowRight, Globe, Lock } from 'lucide-react'
-import Link from 'next/link'
-import { getDictionary, Locale } from '@/lib/i18n'
-import { SiteHeader } from '@/components/site-header'
 import BuyMeACoffee from '@/components/BuyMeACoffee'
+import { SiteHeader } from '@/components/site-header'
 import { Button } from '@/components/ui/button'
+import { Locale, getDictionary } from '@/lib/i18n'
+import { ArrowRight, Shield, Users, Video, Zap } from 'lucide-react'
+import Link from 'next/link'
 
 export default async function HomePage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params
