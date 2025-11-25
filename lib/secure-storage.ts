@@ -100,7 +100,7 @@ class SecureStorage {
       const existingIndex = rooms.findIndex(r => r.roomId === roomData.roomId)
       
       if (existingIndex >= 0) {
-        // Update existing room
+        // Update existing room - always update lastAccessed to most recent
         rooms[existingIndex] = {
           ...rooms[existingIndex],
           ...roomData,
@@ -113,6 +113,9 @@ class SecureStorage {
           lastAccessed: Date.now()
         })
       }
+      
+      // Sort rooms by lastAccessed (most recent first)
+      rooms.sort((a, b) => b.lastAccessed - a.lastAccessed)
       
       const encryptedData = this.encrypt(JSON.stringify(rooms))
       window.localStorage.setItem(ROOMS_KEY, encryptedData)

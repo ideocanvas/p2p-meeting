@@ -241,6 +241,14 @@ export default function RoomPage() {
     const data = await res.json()
     
     if (data.hostPeerId) {
+      // Save room to participant's history
+      await secureStorage.saveRoom({
+        roomId,
+        title: roomInfo?.title || '',
+        createdAt: roomInfo?.createdAt || Date.now(),
+        lastAccessed: Date.now()
+      })
+      
       manager.joinRoom(data.hostPeerId, name)
       setPhase('lobby')
     } else {
