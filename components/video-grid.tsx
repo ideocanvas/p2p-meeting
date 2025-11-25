@@ -32,6 +32,11 @@ interface VideoTileProps {
 }
 
 function VideoTile({ participant, stream, isLocal = false }: VideoTileProps) {
+  // Determine if video is enabled based on participant object
+  const isVideoEnabled = isLocal
+    ? participant.hasVideo // For local, this is passed correctly in the array below
+    : participant.hasVideo;
+
   return (
     <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
       <VideoPlayer
@@ -40,6 +45,7 @@ function VideoTile({ participant, stream, isLocal = false }: VideoTileProps) {
         name={isLocal ? "You" : participant.name}
         className="w-full h-full"
         hasAudio={participant.hasAudio}
+        isVideoEnabled={isVideoEnabled} // Pass the status
       />
       
       {/* Connection status indicator */}

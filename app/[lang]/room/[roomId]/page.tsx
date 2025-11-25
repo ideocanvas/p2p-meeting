@@ -36,6 +36,7 @@ function ParticipantVideo({ participant }: { participant: Participant }) {
       className={`${participant.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2' : 'aspect-video'}`}
       isScreenSharing={participant.isScreenSharing}
       hasAudio={participant.hasAudio}
+      isVideoEnabled={participant.hasVideo} // Pass the status here
     />
   )
 }
@@ -414,6 +415,7 @@ export default function RoomPage() {
                   name="You"
                   className={`${meetingState.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2 aspect-auto' : 'aspect-video'}`}
                   isScreenSharing={meetingState.isScreenSharing}
+                  isVideoEnabled={localVideoEnabled} // Pass local toggle state
                 />
 
                 {/* Remote Participants */}

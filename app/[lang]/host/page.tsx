@@ -320,6 +320,7 @@ function HostPageContent({ params }: { params: Promise<{ lang: string }> }) {
                           stream={localStream}
                           isLocal={true}
                           name="You (Host)"
+                          isVideoEnabled={!MeetingManager.getInstance().state.isVideoMuted} // Pass local video state
                         />
                       </div>
                       
@@ -331,6 +332,7 @@ function HostPageContent({ params }: { params: Promise<{ lang: string }> }) {
                             isLocal={false}
                             name={participant.name}
                             hasAudio={participant.hasAudio}
+                            isVideoEnabled={participant.hasVideo} // Add this
                           />
                         </div>
                       ))}

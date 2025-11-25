@@ -10,35 +10,48 @@ interface VideoPlayerProps {
   className?: string;
   isScreenSharing?: boolean;
   hasAudio?: boolean;
+  isVideoEnabled?: boolean; // Added prop
 }
 
-export function VideoPlayer({ 
-  stream, 
-  isLocal = false, 
-  name = "User", 
+export function VideoPlayer({
+  stream,
+  isLocal = false,
+  name = "User",
   className = "",
   isScreenSharing = false,
-  hasAudio = true
+  hasAudio = true,
+  isVideoEnabled = true // Default to true
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Determine if we should actually show the video element
+  // We show it ONLY if:
+  // 1. The explicit isVideoEnabled prop is true
+  // 2. We have a valid stream
+  // 3. The stream has video tracks
+  // 4. The first video track is enabled (double check)
+  const shouldShowVideo =
+    isVideoEnabled &&
+    stream &&
+    stream.active &&
+    stream.getVideoTracks().length > 0 &&
+    stream.getVideoTracks()[0].enabled;
 
   useEffect(() => {
     const videoEl = videoRef.current;
     if (!videoEl) return;
 
-    if (stream) {
+    if (shouldShowVideo && stream) {
       videoEl.srcObject = stream;
-      // CRITICAL: WebRTC streams often need an explicit kick to start playing
-      // especially after track switches.
       videoEl.play().catch((e) => console.error("Video play failed", e));
     } else {
       videoEl.srcObject = null;
     }
-  }, [stream]); // Re-run whenever the stream object reference changes
+  }, [stream, shouldShowVideo]);
 
   return (
     <div className={`relative bg-gray-900 rounded-xl overflow-hidden shadow-sm border border-gray-800 flex items-center justify-center ${className}`}>
-      {stream && stream.active && stream.getVideoTracks().length > 0 && stream.getVideoTracks()[0].enabled ? (
+      {shouldShowVideo ? (
         <video
           ref={videoRef}
           autoPlay

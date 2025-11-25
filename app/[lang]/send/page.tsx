@@ -247,6 +247,7 @@ function JoinPageContent() {
                 stream={localStream}
                 isLocal={true}
                 name="You"
+                isVideoEnabled={isVideoEnabled} // Pass local video state
               />
             </div>
 
