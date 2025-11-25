@@ -13,8 +13,9 @@ type Message =
   | { type: 'join-request'; name: string }
   | { type: 'join-accepted' }
   | { type: 'join-rejected' }
-  | { type: 'participants-update'; count: number }
-  | { type: 'chat-message'; id: string; senderName: string; text: string; timestamp: number }
+  | { type: 'active-peers'; peers: { id: string; name: string }[] }
+  | { type: 'peer-left'; peerId: string }
+  | { type: 'chat-message'; id: string; senderId?: string; senderName: string; text: string; timestamp: number }
   | { type: 'status-update'; hasVideo: boolean; hasAudio: boolean; isScreenSharing: boolean };
 
 class MeetingManager {
@@ -22,9 +23,11 @@ class MeetingManager {
   private peer: Peer | null = null;
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
-  private connections: Map<string, DataConnection> = new Map(); // peerId -> conn
+  
+  // Keep track of all connections
+  private connections: Map<string, DataConnection> = new Map();
   private calls: Map<string, MediaConnection> = new Map();
-  private trackMonitoringIntervals: Map<string, NodeJS.Timeout> = new Map(); // peerId -> intervalId
+  private trackMonitoringIntervals: Map<string, NodeJS.Timeout> = new Map(); 
   
   // State
   public state: {
@@ -66,7 +69,6 @@ class MeetingManager {
   async initializeMedia() {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      // Initialize audio/video state
       this.state.isAudioMuted = false;
       this.state.isVideoMuted = false;
       this.notify();
@@ -77,6 +79,8 @@ class MeetingManager {
     }
   }
 
+  // --- MEDIA CONTROLS ---
+
   toggleAudio() {
     if (this.localStream) {
       const audioTracks = this.localStream.getAudioTracks();
@@ -84,7 +88,6 @@ class MeetingManager {
         const newEnabledState = !audioTracks[0].enabled;
         audioTracks.forEach(t => t.enabled = newEnabledState);
         this.state.isAudioMuted = !newEnabledState;
-        
         this.updateLocalParticipantState();
         this.broadcastStatusUpdate();
         this.notify();
@@ -92,16 +95,7 @@ class MeetingManager {
     }
   }
 
-  isMuted() {
-    return this.state.isAudioMuted;
-  }
-
-  isVideoOff() {
-    return this.state.isVideoMuted;
-  }
-
   toggleVideo() {
-    // If screen sharing, stop it first to revert to camera
     if (this.state.isScreenSharing) {
       this.stopScreenShare();
       return;
@@ -113,7 +107,6 @@ class MeetingManager {
         const newEnabledState = !videoTracks[0].enabled;
         videoTracks.forEach(t => t.enabled = newEnabledState);
         this.state.isVideoMuted = !newEnabledState;
-        
         this.updateLocalParticipantState();
         this.broadcastStatusUpdate();
         this.notify();
@@ -128,14 +121,11 @@ class MeetingManager {
       this.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       const screenVideoTrack = this.screenStream.getVideoTracks()[0];
 
-      // Handle user clicking "Stop sharing" in browser UI
       screenVideoTrack.onended = () => {
         this.stopScreenShare();
       };
 
-      // Replace video track in all active calls
       if (this.localStream) {
-        // Replace in Peer Connections
         this.calls.forEach((call) => {
           const sender = call.peerConnection.getSenders().find((s) => s.track?.kind === "video");
           if (sender) {
@@ -143,10 +133,8 @@ class MeetingManager {
           }
         });
         
-        // Update local state to show screen share
         this.state.isScreenSharing = true;
-        this.state.isVideoMuted = false; // Video is technically "on" (it's the screen)
-
+        this.state.isVideoMuted = false; 
         this.updateLocalParticipantState();
         this.broadcastStatusUpdate();
         this.notify();
@@ -159,25 +147,20 @@ class MeetingManager {
   stopScreenShare() {
     if (!this.state.isScreenSharing || !this.localStream) return;
 
-    // Stop the screen share tracks
     this.screenStream?.getTracks().forEach(t => t.stop());
     this.screenStream = null;
 
-    // Revert to camera track
     const cameraTrack = this.localStream.getVideoTracks()[0];
     
-    // Ensure camera track respects previous mute state (or default to on if we want)
     if (cameraTrack) {
-        // If the user had video MUTED before screen share, we might want to keep it muted.
-        // For simplicity, let's enable it so they see themselves again.
         cameraTrack.enabled = true;
         this.state.isVideoMuted = false;
 
         this.calls.forEach((call) => {
-        const sender = call.peerConnection.getSenders().find((s) => s.track?.kind === "video");
-        if (sender) {
-            sender.replaceTrack(cameraTrack);
-        }
+            const sender = call.peerConnection.getSenders().find((s) => s.track?.kind === "video");
+            if (sender) {
+                sender.replaceTrack(cameraTrack);
+            }
         });
     }
 
@@ -187,23 +170,24 @@ class MeetingManager {
     this.notify();
   }
 
+  // --- MESSAGING ---
+
   sendMessage(text: string) {
     const myId = this.getPeerId();
     if (!myId) return;
 
-    // Find local name
     const localPart = this.state.participants.find(p => p.id === myId);
     const name = localPart?.name || 'Me';
 
     const message: Message = {
       type: 'chat-message',
       id: Date.now().toString(),
+      senderId: myId,
       senderName: name,
       text,
       timestamp: Date.now()
     };
 
-    // Add to local state
     this.state.messages.push({
       id: message.id,
       senderId: myId,
@@ -212,7 +196,6 @@ class MeetingManager {
       timestamp: message.timestamp
     });
 
-    // Broadcast to all connected peers
     this.connections.forEach(conn => {
       if (conn.open) {
         conn.send(message);
@@ -228,12 +211,20 @@ class MeetingManager {
     if (msg.type === 'chat-message') {
       this.state.messages.push({
         id: msg.id,
-        senderId: peerId,
+        senderId: msg.senderId || peerId,
         senderName: msg.senderName,
         text: msg.text,
         timestamp: msg.timestamp
       });
       this.notify();
+
+      if (this.isHost()) {
+        this.connections.forEach(conn => {
+            if (conn.peer !== peerId && conn.open) {
+                conn.send(msg);
+            }
+        });
+      }
     }
     else if (msg.type === 'status-update') {
       const participant = this.state.participants.find(p => p.id === peerId);
@@ -243,6 +234,17 @@ class MeetingManager {
         participant.isScreenSharing = msg.isScreenSharing;
         this.notify();
       }
+    }
+    else if (msg.type === 'active-peers') {
+        console.log("Received active peers list:", msg.peers);
+        msg.peers.forEach(p => {
+            if (p.id !== this.getPeerId()) {
+                this.connectToPeer(p.id, p.name);
+            }
+        });
+    }
+    else if (msg.type === 'peer-left') {
+        this.handlePeerDisconnection(msg.peerId);
     }
   }
 
@@ -259,20 +261,6 @@ class MeetingManager {
     });
   }
 
-  private updateLocalParticipantState() {
-    const myId = this.getPeerId();
-    const localP = this.state.participants.find(p => p.id === myId);
-    if (localP) {
-      localP.hasAudio = !this.state.isAudioMuted;
-      localP.hasVideo = !this.state.isVideoMuted;
-      localP.isScreenSharing = this.state.isScreenSharing;
-      
-      // Important: If screen sharing, the stream source for local preview might change
-      // dependent on UI implementation, but usually local preview stays as localStream (camera)
-      // or we can switch it to screenStream.
-    }
-  }
-
   // --- HOST LOGIC ---
 
   async startHosting(roomId: string, authToken: string, name: string, isApiKey: boolean = false) {
@@ -281,24 +269,25 @@ class MeetingManager {
     this.peer = new Peer({ config: { iceServers: ICE_SERVERS } });
 
     this.peer.on('open', async (id) => {
-      // Register Host ID with Server using appropriate authentication
-      if (isApiKey) {
-        // Use API key authentication
-        await fetch(`/api/rooms/${roomId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify({ hostPeerId: id })
-        });
-      } else {
-        // Use master password authentication
-        await fetch(`/api/rooms/${roomId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: authToken, hostPeerId: id })
-        });
+      try {
+        if (isApiKey) {
+            await fetch(`/api/rooms/${roomId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ hostPeerId: id })
+            });
+        } else {
+            await fetch(`/api/rooms/${roomId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: authToken, hostPeerId: id })
+            });
+        }
+      } catch (e) {
+          console.error("Failed to register host", e);
       }
       
       this.state.connectionState = 'active';
@@ -318,7 +307,6 @@ class MeetingManager {
       this.setupDataConnection(conn);
     });
 
-    // Handle incoming calls (once approved)
     this.peer.on('call', (call) => {
       call.answer(this.localStream!);
       this.setupCall(call);
@@ -334,20 +322,33 @@ class MeetingManager {
     // 1. Send accepted message
     waiter.conn.send({ type: 'join-accepted' });
 
-    // 2. Initiate Call
-    const call = this.peer!.call(peerId, this.localStream!);
+    // 2. Prepare list of EXISTING peers to send to the NEW guy
+    const existingPeers = this.state.participants
+        .filter(p => p.id !== this.getPeerId() && p.id !== peerId)
+        .map(p => ({ id: p.id, name: p.name }));
+
+    // 3. Send the list so New guy can call them (Mesh)
+    if (existingPeers.length > 0) {
+        setTimeout(() => {
+            waiter.conn.send({ type: 'active-peers', peers: existingPeers });
+        }, 500); 
+    }
+
+    // 4. Host initiates Call to New Guy
+    const myName = this.state.participants.find(p => p.id === this.getPeerId())?.name || "Host";
+    const call = this.peer!.call(peerId, this.localStream!, {
+        metadata: { name: myName }
+    });
+    
+    // 5. Update state using setupCall to avoid duplicates
     this.setupCall(call, waiter.name);
 
-    // 3. Move from waiting to participants
-    this.state.participants.push({
-      id: peerId,
-      name: waiter.name,
-      role: 'participant',
-      status: 'connected',
-      hasAudio: true,
-      hasVideo: true,
-      isScreenSharing: false
-    });
+    // 6. Ensure role is correct (setupCall defaults to participant, but just in case)
+    const p = this.state.participants.find(p => p.id === peerId);
+    if (p) {
+        p.role = 'participant';
+        p.status = 'connected';
+    }
     
     this.addSystemMessage(`${waiter.name} joined the meeting`);
     
@@ -360,14 +361,9 @@ class MeetingManager {
     if (waiterIndex === -1) return;
     
     const waiter = this.state.waitingPeers[waiterIndex];
-    
-    // Send rejection message
     waiter.conn.send({ type: 'join-rejected' });
-    
-    // Close the connection
     waiter.conn.close();
     
-    // Remove from waiting list
     this.state.waitingPeers.splice(waiterIndex, 1);
     this.notify();
   }
@@ -386,14 +382,34 @@ class MeetingManager {
       this.setupDataConnection(conn, name);
     });
 
-    // Wait for Host to call us (after approval)
     this.peer.on('call', (call) => {
       call.answer(this.localStream!);
-      this.state.connectionState = 'active';
-      this.setupCall(call, "Host");
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const callerName = (call.metadata as any)?.name || "Participant";
+      
+      this.setupCall(call, callerName);
+      
+      if (this.state.connectionState !== 'active') {
+          this.state.connectionState = 'active';
+      }
       this.notify();
     });
   }
+
+  connectToPeer(peerId: string, name: string) {
+    if (!this.localStream || !this.peer) return;
+
+    const myName = this.getMyName();
+    
+    const call = this.peer.call(peerId, this.localStream, {
+        metadata: { name: myName }
+    });
+    
+    this.setupCall(call, name);
+  }
+
+  // --- INTERNAL UTILS ---
 
   private setupDataConnection(conn: DataConnection, joinName?: string) {
     conn.on('open', () => {
@@ -402,19 +418,29 @@ class MeetingManager {
         this.notify();
         conn.send({ type: 'join-request', name: joinName });
       }
-      // Send initial status
       this.broadcastStatusUpdate();
     });
 
     conn.on('data', (data: unknown) => {
       const msg = data as Message;
       
-      // Handle handshake messages
       if (msg.type === 'join-request') {
         this.state.waitingPeers.push({ peerId: conn.peer, name: msg.name, conn });
         this.notify();
       } else if (msg.type === 'join-accepted') {
         this.state.connectionState = 'connected';
+        // Check if Host entry exists before pushing to avoid duplicates
+        if (!this.state.participants.some(p => p.id === conn.peer)) {
+            this.state.participants.push({
+                id: conn.peer,
+                name: "Host", 
+                role: 'host',
+                status: 'connected',
+                hasAudio: true,
+                hasVideo: true,
+                isScreenSharing: false
+            });
+        }
         this.notify();
       } else if (msg.type === 'join-rejected') {
         this.state.error = "Host rejected your request";
@@ -422,7 +448,6 @@ class MeetingManager {
         this.notify();
         conn.close();
       } else {
-        // Handle chat and status updates
         this.handleDataMessage(data, conn.peer);
       }
     });
@@ -438,103 +463,67 @@ class MeetingManager {
     this.connections.set(conn.peer, conn);
   }
 
-  // --- COMMON LOGIC ---
-
   private setupCall(call: MediaConnection, nameOverride?: string) {
-    call.on('stream', (remoteStream) => {
-      const existing = this.state.participants.find(p => p.id === call.peer);
-      if (existing) {
-        existing.stream = remoteStream;
-        // Update initial video/audio state based on tracks
-        existing.hasVideo = remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled;
-        existing.hasAudio = remoteStream.getAudioTracks().length > 0 && remoteStream.getAudioTracks()[0].enabled;
-      } else {
-        this.state.participants.push({
+    let p = this.state.participants.find(p => p.id === call.peer);
+    
+    if (!p) {
+        // Create new participant entry if one doesn't exist
+        p = {
           id: call.peer,
           name: nameOverride || "User",
           role: 'participant',
           status: 'connected',
-          hasAudio: remoteStream.getAudioTracks().length > 0 && remoteStream.getAudioTracks()[0].enabled,
-          hasVideo: remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled,
-          isScreenSharing: false,
-          stream: remoteStream
-        });
+          hasAudio: true,
+          hasVideo: true,
+          isScreenSharing: false
+        };
+        this.state.participants.push(p);
+    } else {
+        // Update existing entry
+        if (nameOverride) p.name = nameOverride;
+        p.status = 'connected';
+    }
+
+    call.on('stream', (remoteStream) => {
+      const participant = this.state.participants.find(p => p.id === call.peer);
+      if (participant) {
+        participant.stream = remoteStream;
+        participant.hasVideo = remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled;
+        participant.hasAudio = remoteStream.getAudioTracks().length > 0 && remoteStream.getAudioTracks()[0].enabled;
+        this.notify();
       }
-      
-      // Monitor track changes for remote participants using polling
-      const checkTrackStates = () => {
-        const participant = this.state.participants.find(p => p.id === call.peer);
-        if (participant && remoteStream) {
-          const videoTrack = remoteStream.getVideoTracks()[0];
-          const audioTrack = remoteStream.getAudioTracks()[0];
-          
-          const newVideoState = videoTrack ? videoTrack.enabled : false;
-          const newAudioState = audioTrack ? audioTrack.enabled : false;
-          
-          if (participant.hasVideo !== newVideoState || participant.hasAudio !== newAudioState) {
-            participant.hasVideo = newVideoState;
-            participant.hasAudio = newAudioState;
-            this.notify();
-          }
-        }
-      };
-      
-      // Check track states periodically
-      const intervalId = setInterval(checkTrackStates, 1000);
-      this.trackMonitoringIntervals.set(call.peer, intervalId);
-      
-      this.notify();
     });
 
     call.on('close', () => {
       this.handlePeerDisconnection(call.peer);
     });
     
-    call.on('error', () => {
+    call.on('error', (err) => {
+      console.error("Call error", err);
       this.handlePeerDisconnection(call.peer);
     });
 
     this.calls.set(call.peer, call);
-  }
-
-  private checkTrackStatus(peerId: string, stream: MediaStream) {
-     const participant = this.state.participants.find(p => p.id === peerId);
-     if (participant) {
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTrack = stream.getAudioTracks()[0];
-        
-        // Only update if we haven't received a specific status update message overriding this
-        // Note: For Avatar fix, strictly checking track.enabled is usually the source of truth
-        const newVideoState = videoTrack && videoTrack.readyState === 'live' ? videoTrack.enabled : false;
-        const newAudioState = audioTrack && audioTrack.readyState === 'live' ? audioTrack.enabled : false;
-        
-        let changed = false;
-        // Logic: if track is disabled physically, update state.
-        // If track is enabled physically, but our metadata says screen share, keep screen share true.
-        if (participant.hasVideo !== newVideoState) {
-            participant.hasVideo = newVideoState;
-            changed = true;
-        }
-        if (participant.hasAudio !== newAudioState) {
-            participant.hasAudio = newAudioState;
-            changed = true;
-        }
-        if (changed) this.notify();
-     }
+    this.notify();
   }
 
   private handlePeerDisconnection(peerId: string) {
-      // Find name before removing
+      if (this.isHost()) {
+          this.connections.forEach(conn => {
+              if (conn.open && conn.peer !== peerId) {
+                  conn.send({ type: 'peer-left', peerId });
+              }
+          });
+      }
+
       const participant = this.state.participants.find(p => p.id === peerId);
       if (participant) {
         this.addSystemMessage(`${participant.name} left the meeting`);
       }
 
-      // Cleanup lists
       this.state.participants = this.state.participants.filter(p => p.id !== peerId);
       this.state.waitingPeers = this.state.waitingPeers.filter(p => p.peerId !== peerId);
       
-      // Cleanup maps and intervals
       this.connections.delete(peerId);
       this.calls.delete(peerId);
       
@@ -545,6 +534,16 @@ class MeetingManager {
       }
 
       this.notify();
+  }
+
+  private updateLocalParticipantState() {
+    const myId = this.getPeerId();
+    const localP = this.state.participants.find(p => p.id === myId);
+    if (localP) {
+      localP.hasAudio = !this.state.isAudioMuted;
+      localP.hasVideo = !this.state.isVideoMuted;
+      localP.isScreenSharing = this.state.isScreenSharing;
+    }
   }
 
   private addSystemMessage(text: string) {
@@ -560,14 +559,20 @@ class MeetingManager {
   }
 
   getLocalStream() {
-      // Return screen stream if sharing, otherwise local camera
       return this.state.isScreenSharing && this.screenStream ? this.screenStream : this.localStream;
   }
   
   getPeerId() { return this.peer?.id; }
+  
+  getMyName() {
+      return this.state.participants.find(p => p.id === this.getPeerId())?.name || "Me";
+  }
+
+  isHost() {
+      return this.state.participants.find(p => p.id === this.getPeerId())?.role === 'host';
+  }
 
   leave() {
-    // Notify others
     this.connections.forEach(conn => {
         if(conn.open) conn.close();
     });
@@ -592,7 +597,6 @@ class MeetingManager {
       isVideoMuted: false,
       isScreenSharing: false
     };
-    // (MeetingManager as any).instance = null; // Optional: reset singleton
     this.notify();
   }
 }
