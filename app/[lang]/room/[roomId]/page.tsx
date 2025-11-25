@@ -155,7 +155,12 @@ export default function RoomPage() {
          setLocalAudioEnabled(!manager.state.isAudioMuted)
       }
     })
-    return () => { unsub() }
+
+    // FIX: Add cleanup on unmount
+    return () => {
+      unsub()
+      manager.leave() // Ensure camera is released when leaving the page
+    }
   }, [roomId, lang, router])
 
   // 2. Initialize Media Preview in Setup

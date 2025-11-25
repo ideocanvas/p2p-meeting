@@ -89,6 +89,7 @@ function HostPageContent({ params }: { params: Promise<{ lang: string }> }) {
 
     return () => {
       unsubscribe();
+      meetingManager.leave(); // FIX: Release media on unmount
     };
   }, []);
 

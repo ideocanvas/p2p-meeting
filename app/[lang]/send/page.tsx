@@ -88,6 +88,7 @@ function JoinPageContent() {
 
     return () => {
       unsubscribe();
+      meetingManager.leave(); // FIX: Release media on unmount
     };
   }, [roomId, participantName]);
 

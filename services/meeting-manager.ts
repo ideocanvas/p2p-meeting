@@ -21,10 +21,12 @@ class MeetingManager {
   private static instance: MeetingManager;
   private peer: Peer | null = null;
   
-  // We keep the raw tracks separate from the stream object to manage them better
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
   private _isToggling: boolean = false;
+  
+  // FIX: Generation ID to handle async race conditions
+  private _mediaGenerationId: number = 0;
 
   private connections: Map<string, DataConnection> = new Map();
   private calls: Map<string, MediaConnection> = new Map();
@@ -66,19 +68,49 @@ class MeetingManager {
     this.listeners.forEach(l => l());
   }
 
+  // --- MEDIA MANAGEMENT ---
+
+  private stopStream(stream: MediaStream | null) {
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        track.stop();
+        track.enabled = false;
+      });
+    }
+  }
+
   async initializeMedia() {
+    // Increment ID to invalidate any previous pending requests
+    const myGenerationId = ++this._mediaGenerationId;
+
+    // 1. Stop any existing streams immediately
+    this.stopStream(this.localStream);
+    this.localStream = null;
+
     try {
-      // 1. Acquire hardware ONCE. Keep it alive.
-      this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // 2. Request new stream
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       
+      // 3. Check if we were cleaned up/reset while awaiting
+      if (this._mediaGenerationId !== myGenerationId) {
+        console.warn("MeetingManager: Stream acquired after cleanup. Stopping track immediately.");
+        this.stopStream(stream);
+        return;
+      }
+
+      this.localStream = stream;
       this.attachLocalTrackListeners();
+      
+      // Reset mute states
       this.state.isAudioMuted = false;
       this.state.isVideoMuted = false;
       this.notify();
     } catch (e) {
-      console.error("Media error", e);
-      this.state.error = "Could not access camera/microphone";
-      this.notify();
+      if (this._mediaGenerationId === myGenerationId) {
+        console.error("Media error", e);
+        this.state.error = "Could not access camera/microphone";
+        this.notify();
+      }
     }
   }
 
@@ -87,7 +119,6 @@ class MeetingManager {
 
     this.localStream.getVideoTracks().forEach(track => {
       track.onended = () => {
-        // This only fires if hardware is physically disconnected or permission revoked
         console.log("Video track ended (Hardware/System)");
         this.state.isVideoMuted = true;
         this.broadcastStatusUpdate();
@@ -105,14 +136,11 @@ class MeetingManager {
     });
   }
 
-  // --- MEDIA CONTROLS ---
-
   toggleAudio() {
     if (!this.localStream) return;
     const audioTrack = this.localStream.getAudioTracks()[0];
     
     if (audioTrack) {
-      // Soft toggle: just stop sending data, keep hardware active
       audioTrack.enabled = !audioTrack.enabled;
       this.state.isAudioMuted = !audioTrack.enabled;
       
@@ -125,53 +153,44 @@ class MeetingManager {
   async toggleVideo() {
     if (this._isToggling) return;
     this._isToggling = true;
+    const myGenerationId = this._mediaGenerationId;
 
     try {
-      // Handle Screen Share case
       if (this.state.isScreenSharing) {
         await this.stopScreenShare();
-        this._isToggling = false;
         return;
       }
 
-      // 1. Check if we have a stream
       if (!this.localStream) {
         await this.initializeMedia();
-        this._isToggling = false;
         return;
       }
 
       const videoTrack = this.localStream.getVideoTracks()[0];
 
       if (videoTrack) {
-        // --- SOFT TOGGLE START ---
-        // We simply flip the 'enabled' switch.
-        // false = sends black frames (mute).
-        // true = sends camera frames.
-        // We NEVER call track.stop(). The camera light will stay on.
+        // Soft toggle
         videoTrack.enabled = !videoTrack.enabled;
-        
         this.state.isVideoMuted = !videoTrack.enabled;
-
-        // CRITICAL: We create a NEW MediaStream object reference.
-        // Even though the track is the same, this forces React to detect a change
-        // and re-run any useEffects attached to the <video> element.
+        
+        // Force React update by creating new stream reference with same tracks
         this.localStream = new MediaStream(this.localStream.getTracks());
         
         this.updateLocalParticipantState();
         this.broadcastStatusUpdate();
         this.notify();
-        // --- SOFT TOGGLE END ---
       } else {
-        // Fallback: If track is missing (e.g. started audio-only), we must get one.
-        console.log("No video track found. Acquiring...");
+        // Fallback: acquire video track
         const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        
+        // Race condition check
+        if (this._mediaGenerationId !== myGenerationId) {
+            this.stopStream(newStream);
+            return;
+        }
+
         const newTrack = newStream.getVideoTracks()[0];
-        
-        // Add to our persistent stream
         this.localStream.addTrack(newTrack);
-        
-        // We have to "replace" the track in existing calls because it's a new ID
         await this.replaceVideoTrack(newTrack);
         
         this.state.isVideoMuted = false;
@@ -189,18 +208,26 @@ class MeetingManager {
   async startScreenShare() {
     if (this._isToggling) return;
     this._isToggling = true;
+    const myGenerationId = this._mediaGenerationId;
 
     try {
       if (this.state.isScreenSharing) return;
 
       this.screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      
+      // Race check
+      if (this._mediaGenerationId !== myGenerationId) {
+          this.stopStream(this.screenStream);
+          this.screenStream = null;
+          return;
+      }
+
       const screenVideoTrack = this.screenStream.getVideoTracks()[0];
 
       screenVideoTrack.onended = () => {
         this.stopScreenShare();
       };
 
-      // Replace the camera track with the screen track in all connections
       await this.replaceVideoTrack(screenVideoTrack);
         
       this.state.isScreenSharing = true;
@@ -220,22 +247,17 @@ class MeetingManager {
   async stopScreenShare() {
     if (!this.state.isScreenSharing) return;
 
-    // Stop the screen share tracks (this ends the "Sharing" browser UI)
-    this.screenStream?.getTracks().forEach(t => t.stop());
+    this.stopStream(this.screenStream);
     this.screenStream = null;
 
     try {
-        // Go back to Camera
         if (this.localStream) {
             const camTrack = this.localStream.getVideoTracks()[0];
-            
-            // Should we unmute when returning from screen share? Usually yes.
             if (camTrack) {
                 camTrack.enabled = true;
                 await this.replaceVideoTrack(camTrack);
                 this.state.isVideoMuted = false;
             } else {
-                // If camera track somehow died, re-init
                 await this.initializeMedia();
             }
         }
@@ -249,25 +271,16 @@ class MeetingManager {
     this.notify();
   }
 
-  /**
-   * Replaces the video track in all active connections.
-   * Used primarily for switching between Camera and Screen Share.
-   */
   private async replaceVideoTrack(newTrack: MediaStreamTrack) {
-    // 1. Update local stream object for React
     if (this.localStream) {
         const audioTracks = this.localStream.getAudioTracks();
-        // Create new stream with existing audio + NEW video
         this.localStream = new MediaStream([...audioTracks, newTrack]);
     }
 
-    // 2. Update Peer Connections
     const replacePromises = Array.from(this.calls.values()).map(async (call) => {
       const pc = call.peerConnection;
       if (!pc || pc.connectionState === 'closed') return;
 
-      // Robust Sender Finding:
-      // We look for a sender that is NOT audio.
       const senders = pc.getSenders();
       const videoSender = senders.find(s => s.track?.kind === 'video') 
                           || senders.find(s => s.track?.kind !== 'audio');
@@ -339,7 +352,6 @@ class MeetingManager {
     else if (msg.type === 'status-update') {
       const participant = this.state.participants.find(p => p.id === peerId);
       if (participant) {
-        // Update data state
         participant.hasVideo = msg.hasVideo;
         participant.hasAudio = msg.hasAudio;
         participant.isScreenSharing = msg.isScreenSharing;
@@ -361,8 +373,6 @@ class MeetingManager {
   private broadcastStatusUpdate() {
     const update: Message = {
       type: 'status-update',
-      // Send our logical state. 
-      // Even if track is technically "enabled" but we are switching, use this truth.
       hasVideo: !this.state.isVideoMuted,
       hasAudio: !this.state.isAudioMuted,
       isScreenSharing: this.state.isScreenSharing
@@ -373,7 +383,7 @@ class MeetingManager {
     });
   }
 
-  // --- HOST / JOIN LOGIC (Standard) ---
+  // --- CONNECTION LOGIC ---
 
   async startHosting(roomId: string, authToken: string, name: string, isApiKey: boolean = false) {
     if (!this.localStream) await this.initializeMedia();
@@ -592,6 +602,9 @@ class MeetingManager {
   isHost() { return this.state.participants.find(p => p.id === this.getPeerId())?.role === 'host'; }
 
   leave() {
+    // FIX: Increment generation ID to invalidate any pending async media requests
+    this._mediaGenerationId++;
+
     if (this.isHost()) {
       const myId = this.getPeerId();
       this.connections.forEach(conn => { if (conn.open) conn.send({ type: 'peer-left', peerId: myId || '' }); });
@@ -602,8 +615,12 @@ class MeetingManager {
     this.trackMonitoringIntervals.clear();
     
     this.peer?.destroy();
-    this.localStream?.getTracks().forEach(t => t.stop());
-    this.screenStream?.getTracks().forEach(t => t.stop());
+
+    // FIX: Explicitly stop all tracks
+    this.stopStream(this.localStream);
+    this.stopStream(this.screenStream);
+    this.localStream = null;
+    this.screenStream = null;
     
     this.connections.clear();
     this.calls.clear();
