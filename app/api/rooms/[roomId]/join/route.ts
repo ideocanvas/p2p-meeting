@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { roomService } from '@/services/room-service'
 
 interface JoinRoomRequest {
-  roomId: string;
   participantName: string;
   peerId: string;
-  password?: string;
 }
 
 interface JoinRoomResponse {
@@ -27,48 +25,35 @@ export async function POST(
       return NextResponse.json({
         success: false,
         error: 'Participant name must be at least 2 characters long'
-      }, { status: 400 });
+      });
     }
 
     if (!body.peerId) {
       return NextResponse.json({
         success: false,
         error: 'Peer ID is required'
-      }, { status: 400 });
+      });
     }
 
-    // Get room using the room service
-    const room = await roomService.getRoom(roomId);
-    if (!room) {
+    // Join room using the room service
+    const result = await roomService.joinRoom(roomId, body.participantName, body.peerId);
+
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        participantId: result.participantId
+      });
+    } else {
       return NextResponse.json({
         success: false,
-        error: 'Room not found'
-      }, { status: 404 });
+        error: result.error || 'Failed to join room'
+      });
     }
-
-    // Verify password if provided
-    if (body.password) {
-      const isValid = await roomService.verifyMasterPassword(roomId, body.password);
-      if (!isValid) {
-        return NextResponse.json({
-          success: false,
-          error: 'Invalid password'
-        }, { status: 401 });
-      }
-    }
-
-    // Generate participant ID
-    const participantId = `participant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    return NextResponse.json({
-      success: true,
-      participantId
-    });
   } catch (error) {
     console.error('Error joining room:', error);
     return NextResponse.json({
       success: false,
       error: 'Server error'
-    }, { status: 500 });
+    });
   }
 }

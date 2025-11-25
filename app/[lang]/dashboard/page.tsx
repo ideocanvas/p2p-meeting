@@ -5,22 +5,25 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { meetingService } from '@/lib/meeting-service'
-import { PersistentMeetingRoom } from '@/lib/types'
+import { LocalRoomData } from '@/lib/types'
 import { toast } from 'sonner'
-import { 
-  Plus, 
-  Users, 
-  Calendar, 
-  Video, 
-  Copy, 
-  Share2, 
+import {
+  Plus,
+  Users,
+  Calendar,
+  Video,
+  Copy,
+  Share2,
   Clock,
-  Trash2
+  Trash2,
+  Key,
+  Settings
 } from 'lucide-react'
+import { secureStorage } from '@/lib/secure-storage'
 
 export default function DashboardPage({ params }: { params: Promise<{ lang: string }> }) {
   const [lang, setLang] = useState('en')
-  const [rooms, setRooms] = useState<PersistentMeetingRoom[]>([])
+  const [rooms, setRooms] = useState<LocalRoomData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
@@ -39,11 +42,8 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
   const loadRooms = async () => {
     try {
       setIsLoading(true)
-      // In a real implementation, this would fetch from an API
-      // For now, we'll simulate loading rooms from localStorage
-      const storedRooms = typeof window !== 'undefined' 
-        ? JSON.parse(window.localStorage.getItem('persistentRooms') || '[]')
-        : []
+      // Load rooms from secure storage
+      const storedRooms = await secureStorage.getRooms()
       setRooms(storedRooms)
     } catch (error) {
       console.error('Error loading rooms:', error)
@@ -90,18 +90,16 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
     }
 
     try {
-      // Remove from localStorage
-      const updatedRooms = rooms.filter(room => room.id !== roomId)
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem('persistentRooms', JSON.stringify(updatedRooms))
-      }
-      setRooms(updatedRooms)
+      // Remove from secure storage
+      await secureStorage.removeRoom(roomId)
+      setRooms(rooms.filter(room => room.roomId !== roomId))
       toast.success('Room deleted successfully')
     } catch (error) {
       console.error('Error deleting room:', error)
       toast.error('Failed to delete room')
     }
   }
+
 
   if (isLoading) {
     return (
@@ -153,36 +151,36 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
           // Rooms Grid
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {rooms.map((room) => (
-              <Card key={room.id} className="hover:shadow-lg transition-shadow">
+              <Card key={room.roomId} className="hover:shadow-lg transition-shadow">
                 <CardHeader className="pb-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <CardTitle className="text-lg truncate">{room.title}</CardTitle>
                       <CardDescription className="line-clamp-2 mt-1">
-                        {room.description}
+                        Created {new Date(room.createdAt).toLocaleDateString()}
                       </CardDescription>
                     </div>
                     <div className="flex gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleCopyLink(room.id)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCopyLink(room.roomId)}
                         className="h-8 w-8 p-0"
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleShareRoom(room.id)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleShareRoom(room.roomId)}
                         className="h-8 w-8 p-0"
                       >
                         <Share2 className="w-4 h-4" />
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleDeleteRoom(room.id)}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteRoom(room.roomId)}
                         className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -194,64 +192,33 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
                   {/* Room Stats */}
                   <div className="flex items-center justify-between text-sm text-gray-600">
                     <div className="flex items-center gap-1">
-                      <Users className="w-4 h-4" />
-                      <span>Up to {room.settings.maxParticipants} participants</span>
+                      <Video className="w-4 h-4" />
+                      <span>Meeting Room</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="w-4 h-4" />
-                      <span>{room.settings.defaultMeetingDuration} min</span>
+                      <span>Last accessed {new Date(room.lastAccessed).toLocaleDateString()}</span>
                     </div>
-                  </div>
-
-                  {/* Room Settings Summary */}
-                  <div className="flex flex-wrap gap-2">
-                    {room.settings.videoOnEntry && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                        <Video className="w-3 h-3 mr-1" />
-                        Video On
-                      </span>
-                    )}
-                    {room.settings.enableChat && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                        💬 Chat
-                      </span>
-                    )}
-                    {room.settings.enableScreenShare && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-purple-100 text-purple-800">
-                        🖥️ Screen Share
-                      </span>
-                    )}
                   </div>
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <Button 
-                      onClick={() => handleJoinRoom(room.id)}
+                    <Button
+                      onClick={() => handleJoinRoom(room.roomId)}
                       className="flex-1 flex items-center gap-2"
                     >
                       <Video className="w-4 h-4" />
                       Join Now
                     </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handleShareRoom(room.id)}
-                      className="flex items-center gap-2"
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </Button>
                   </div>
 
                   {/* Quick Actions */}
                   <div className="flex justify-between text-xs text-gray-500">
-                    <button 
-                      onClick={() => handleCopyLink(room.id)}
+                    <button
+                      onClick={() => handleCopyLink(room.roomId)}
                       className="hover:text-gray-700"
                     >
                       Copy Link
-                    </button>
-                    <button className="hover:text-gray-700">
-                      Schedule Meeting
                     </button>
                     <button className="hover:text-gray-700">
                       View History
@@ -287,7 +254,7 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-gray-900">
-                      {rooms.reduce((sum, room) => sum + room.settings.maxParticipants, 0)}
+                      {rooms.length}
                     </p>
                     <p className="text-sm text-gray-600">Total Capacity</p>
                   </div>
