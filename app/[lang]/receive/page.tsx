@@ -7,8 +7,8 @@ import { QRCodeGenerator } from "@/components/qr-code-generator";
 import { ConnectionStatus } from "@/components/connection-status";
 import { ConnectionLogger, LogEntry } from "@/components/connection-logger";
 import { toast } from "sonner";
-import MeetingManager, { ConnectionState, Participant } from "@/services/meeting-manager";
-import { IMediaStream } from "@/lib/types";
+import MeetingManager from "@/services/meeting-manager";
+import { ConnectionState, Participant } from "@/lib/types";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslations } from "@/lib/client-i18n";
 import BuyMeACoffee from "@/components/BuyMeACoffee";
@@ -37,7 +37,7 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
   const [verificationCode, setVerificationCode] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [localStream, setLocalStream] = useState<IMediaStream | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const handleLog = (log: LogEntry) => {
     setLogs((prev) => [...prev, log]);
@@ -60,39 +60,31 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
     const meetingManager = MeetingManager.getInstance();
     
     // Subscribe to state changes
-    const unsubscribe = meetingManager.subscribe({
-      onConnectionStateChange: (state: ConnectionState) => {
-        setConnectionState(state);
-        
-        // Update other state from meeting manager
-        const managerState = meetingManager.getState();
-        setParticipants(managerState.participants);
-        setError(managerState.error);
-        setVerificationCode(managerState.verificationCode);
-        setIsVerified(managerState.isVerified);
-        
-        // Update room ID when available
-        if (managerState.roomId && !roomId) {
-          setRoomId(managerState.roomId);
-          
-          // Register short code when room ID is available
-          registerShortCode(managerState.roomId);
-        }
-      },
-      onParticipantJoined: handleParticipantJoined,
-      onParticipantLeft: handleParticipantLeft,
-      onLog: handleLog,
+    const unsubscribe = meetingManager.subscribe(() => {
+      setConnectionState(meetingManager.state.connectionState);
+      setParticipants(meetingManager.state.participants);
+      setError(meetingManager.state.error);
+      setLocalStream(meetingManager.getLocalStream());
     });
 
     // Initialize meeting as host
-    meetingManager.createMeeting().then((id) => {
-      console.log("Meeting created with room ID:", id);
-      setRoomId(id);
-      registerShortCode(id);
-    }).catch((err) => {
-      console.error("Failed to create meeting:", err);
-      setError(t("host.connectionFailed"));
-    });
+    const initializeMeeting = async () => {
+      try {
+        // Generate a room ID
+        const id = Math.random().toString(36).substring(2, 15);
+        console.log("Meeting created with room ID:", id);
+        setRoomId(id);
+        registerShortCode(id);
+        
+        // Initialize media
+        await meetingManager.initializeMedia();
+      } catch (err: unknown) {
+        console.error("Failed to create meeting:", err);
+        setError(t("host.connectionFailed"));
+      }
+    };
+    
+    initializeMeeting();
 
     return () => {
       unsubscribe();
@@ -129,8 +121,13 @@ export default function HostPage({ params }: { params: Promise<{ lang: string }>
   const handleVerificationSubmit = () => {
     if (enteredCode.trim().length === 6) {
       const meetingManager = MeetingManager.getInstance();
-      const success = meetingManager.admitParticipant(enteredCode.trim());
-      if (!success) {
+      // Find the waiting peer with this verification code
+      const waitingPeer = meetingManager.state.waitingPeers.find(p =>
+        p.peerId.includes(enteredCode.trim())
+      );
+      if (waitingPeer) {
+        meetingManager.approveParticipant(waitingPeer.peerId);
+      } else {
         toast.error(t("host.verificationFailed"));
       }
     } else {

@@ -121,6 +121,3 @@ export class KVHelper {
     return this.useMemoryFallback;
   }
 }
-
-// Export singleton instance
-export const kvHelper = KVHelper.getInstance();

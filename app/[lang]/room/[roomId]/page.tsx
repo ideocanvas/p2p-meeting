@@ -15,6 +15,7 @@ import { PublicRoomInfo, Participant, ChatMessage } from '@/lib/types'
 import { secureStorage } from '@/lib/secure-storage'
 import { QRCodeGenerator } from '@/components/qr-code-generator'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { VideoPlayer } from '@/components/video-player'
 
 const getInitials = (name: string) => {
   return (name || 'User')
@@ -27,52 +28,15 @@ const getInitials = (name: string) => {
 
 // 1. Participant Tile Component (Updated)
 function ParticipantVideo({ participant }: { participant: Participant }) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-
-    if (participant.stream) {
-      video.srcObject = participant.stream
-    }
-  }, [participant.stream])
-
   return (
-    <div className={`relative bg-gray-900 rounded-xl overflow-hidden shadow-sm border border-gray-800 flex items-center justify-center ${participant.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2' : 'aspect-video'}`}>
-      {participant.hasVideo && participant.stream ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          className={`w-full h-full object-cover ${participant.isScreenSharing ? 'object-contain bg-black' : ''}`}
-        />
-      ) : (
-        <div className="flex flex-col items-center justify-center w-full h-full bg-gray-800 absolute inset-0">
-           <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
-              <span className="text-2xl font-bold text-white tracking-widest">
-                {getInitials(participant.name)}
-              </span>
-           </div>
-           <p className="mt-3 text-gray-400 text-sm font-medium">Camera Off</p>
-        </div>
-      )}
-
-      {/* Name Tag */}
-      <div className="absolute bottom-2 left-2 right-2 flex justify-between items-end z-10">
-        <div className="bg-black/60 backdrop-blur-sm px-2 py-1 rounded text-xs text-white font-medium truncate max-w-[150px] flex items-center gap-1">
-          {participant.name}
-          {participant.isScreenSharing && <Monitor className="w-3 h-3 text-blue-400 ml-1"/>}
-        </div>
-        <div className="flex gap-1">
-            {!participant.hasAudio && (
-              <div className="bg-red-500/90 p-1.5 rounded-full shadow-sm">
-                <MicOff className="w-3 h-3 text-white"/>
-              </div>
-            )}
-        </div>
-      </div>
-    </div>
+    <VideoPlayer
+      stream={participant.stream || null}
+      isLocal={false}
+      name={participant.name}
+      className={`${participant.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2' : 'aspect-video'}`}
+      isScreenSharing={participant.isScreenSharing}
+      hasAudio={participant.hasAudio}
+    />
   )
 }
 
@@ -294,16 +258,12 @@ export default function RoomPage() {
             <CardContent className="grid md:grid-cols-2 gap-0 p-0">
               {/* Preview Area */}
               <div className="relative bg-black aspect-[4/3] md:aspect-auto md:h-full order-first md:order-last flex items-center justify-center">
-                {localVideoEnabled ? (
-                    <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-                ) : (
-                    <div className="flex flex-col items-center justify-center">
-                        <div className="w-24 h-24 rounded-full bg-gray-700 flex items-center justify-center mb-2">
-                             <span className="text-2xl text-white font-bold">{getInitials(name || 'Me')}</span>
-                        </div>
-                        <span className="text-gray-400 text-sm">Camera is off</span>
-                    </div>
-                )}
+                <VideoPlayer
+                  stream={localVideoRef.current ? manager.getLocalStream() : null}
+                  isLocal={true}
+                  name={name || 'Me'}
+                  className="aspect-[4/3] md:aspect-auto md:h-full"
+                />
                 
                 <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 z-10">
                   <Button
@@ -448,26 +408,13 @@ export default function RoomPage() {
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 auto-rows-fr max-w-7xl mx-auto min-h-full content-start">
                 
                 {/* Local User */}
-                <div className={`relative bg-gray-900 rounded-xl overflow-hidden shadow-lg border border-gray-800 flex items-center justify-center ${meetingState.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2 aspect-auto' : 'aspect-video'}`}>
-                    {localVideoEnabled || meetingState.isScreenSharing ? (
-                        <video
-                            ref={(ref) => { if(ref && manager.getLocalStream()) ref.srcObject = manager.getLocalStream() }}
-                            autoPlay muted playsInline
-                            className={`w-full h-full ${meetingState.isScreenSharing ? 'object-contain bg-black' : 'object-cover transform scale-x-[-1]'}`}
-                        />
-                    ) : (
-                        <div className="flex flex-col items-center justify-center w-full h-full bg-gray-800 absolute inset-0">
-                        <div className="w-20 h-20 rounded-full bg-indigo-600 flex items-center justify-center shadow-lg border-2 border-white/20">
-                            <span className="text-2xl font-bold text-white tracking-widest">{getInitials(name || 'Me')}</span>
-                        </div>
-                        <p className="mt-2 text-white/50 text-xs">You</p>
-                        </div>
-                    )}
-                    
-                    <div className="absolute bottom-2 left-2 text-white bg-black/60 px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1">
-                       You {meetingState.isScreenSharing && <Monitor className="w-3 h-3 text-blue-400"/>}
-                    </div>
-                </div>
+                <VideoPlayer
+                  stream={manager.getLocalStream()}
+                  isLocal={true}
+                  name="You"
+                  className={`${meetingState.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2 aspect-auto' : 'aspect-video'}`}
+                  isScreenSharing={meetingState.isScreenSharing}
+                />
 
                 {/* Remote Participants */}
                 {meetingState.participants

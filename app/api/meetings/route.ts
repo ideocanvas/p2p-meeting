@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the Cloudflare context
-    const { env } = getCloudflareContext();
+    const { env } = await getCloudflareContext({async: true});
 
     // @ts-expect-error - Cloudflare KV binding
     const MEETING_CODES: KVNamespace = env.MEETING_CODES || env.SHORT_CODES;
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the Cloudflare context
-    const { env } = getCloudflareContext();
+    const { env } = await getCloudflareContext({async: true});
 
     // @ts-expect-error - Cloudflare KV binding
     const MEETING_CODES: KVNamespace = env.MEETING_CODES || env.SHORT_CODES;
@@ -148,7 +148,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get the Cloudflare context
-    const { env } = getCloudflareContext();
+    const { env } = await getCloudflareContext({async: true});
 
     // @ts-expect-error - Cloudflare KV binding
     const MEETING_CODES: KVNamespace = env.MEETING_CODES || env.SHORT_CODES;

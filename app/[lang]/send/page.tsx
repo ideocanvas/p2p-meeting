@@ -6,11 +6,12 @@ import { ArrowLeft, Video, Phone, Mic, MicOff, VideoOff } from "lucide-react";
 import Link from "next/link";
 import { ConnectionStatus } from "@/components/connection-status";
 import { ConnectionLogger, LogEntry } from "@/components/connection-logger";
-import MeetingManager, { ConnectionState, Participant } from "@/services/meeting-manager";
-import { IMediaStream } from "@/lib/types";
+import MeetingManager from "@/services/meeting-manager";
+import { ConnectionState, Participant } from "@/lib/types";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { getTranslations } from "@/lib/client-i18n";
 import BuyMeACoffee from "@/components/BuyMeACoffee";
+import { VideoPlayer } from "@/components/video-player";
 
 function JoinPageContent() {
   const searchParams = useSearchParams();
@@ -27,7 +28,7 @@ function JoinPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [verificationCode, setVerificationCode] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
-  const [localStream, setLocalStream] = useState<IMediaStream | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
 
@@ -41,19 +42,11 @@ function JoinPageContent() {
     const meetingManager = MeetingManager.getInstance();
     
     // Subscribe to state changes
-    const unsubscribe = meetingManager.subscribe({
-      onConnectionStateChange: (state: ConnectionState) => {
-        setConnectionState(state);
-        
-        // Update other state from meeting manager
-        const managerState = meetingManager.getState();
-        setParticipants(managerState.participants);
-        setError(managerState.error);
-        setVerificationCode(managerState.verificationCode);
-        setIsVerified(managerState.isVerified);
-        setLocalStream(managerState.localStream);
-      },
-      onLog: handleLog,
+    const unsubscribe = meetingManager.subscribe(() => {
+      setConnectionState(meetingManager.state.connectionState);
+      setParticipants(meetingManager.state.participants);
+      setError(meetingManager.state.error);
+      setLocalStream(meetingManager.getLocalStream());
     });
 
     const joinMeeting = async () => {
@@ -68,7 +61,7 @@ function JoinPageContent() {
           if (data.success) {
             handleLog({ timestamp: new Date(), level: "success", message: "Found room ID from short code", details: `Room ID: ${data.roomId}` });
             // Join using the full room ID
-            await meetingManager.joinMeeting(data.roomId, participantName || "Anonymous");
+            await meetingManager.joinRoom(data.roomId, participantName || "Anonymous");
           } else {
             handleLog({ timestamp: new Date(), level: "error", message: "Failed to lookup short code", details: data.error });
             setError("Invalid meeting code - please check and try again");
@@ -77,7 +70,7 @@ function JoinPageContent() {
         } else {
           // Assume it's a full room ID (backward compatibility)
           handleLog({ timestamp: new Date(), level: "info", message: "Using direct room ID connection" });
-          await meetingManager.joinMeeting(roomId, participantName || "Anonymous");
+          await meetingManager.joinRoom(roomId, participantName || "Anonymous");
         }
       } catch (err) {
         console.error("Failed to join meeting:", err);
@@ -86,9 +79,9 @@ function JoinPageContent() {
     };
 
     // Enable media first
-    meetingManager.enableMedia().then(() => {
+    meetingManager.initializeMedia().then(() => {
       joinMeeting();
-    }).catch((err) => {
+    }).catch((err: unknown) => {
       console.error("Failed to enable media:", err);
       setError("Failed to enable camera and microphone");
     });
@@ -118,7 +111,7 @@ function JoinPageContent() {
 
   const handleLeaveMeeting = () => {
     const meetingManager = MeetingManager.getInstance();
-    meetingManager.leaveMeeting();
+    meetingManager.leave();
     window.location.href = `/${lang}`;
   };
 
@@ -250,27 +243,11 @@ function JoinPageContent() {
             
             {/* Video preview area */}
             <div className="bg-gray-900 rounded-lg p-4 mb-4">
-              <div className="aspect-video bg-gray-800 rounded-lg flex items-center justify-center">
-                {localStream ? (
-                  <video
-                    autoPlay
-                    muted
-                    playsInline
-                    className="w-full h-full object-cover rounded-lg"
-                    ref={(videoElement) => {
-                      if (videoElement && localStream) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        (videoElement as any).srcObject = localStream;
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="text-center">
-                    <VideoOff className="w-16 h-16 text-gray-600 mx-auto mb-2" />
-                    <p className="text-gray-400">Camera off</p>
-                  </div>
-                )}
-              </div>
+              <VideoPlayer
+                stream={localStream}
+                isLocal={true}
+                name="You"
+              />
             </div>
 
             {/* Meeting controls */}

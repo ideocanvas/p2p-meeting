@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Participant, IMediaStream } from "@/lib/types";
+import { Participant } from "@/lib/types";
 import { Video, VideoOff, Mic, MicOff, Users } from "lucide-react";
+import { VideoPlayer } from "@/components/video-player";
 
 interface VideoGridProps {
   participants: Participant[];
-  localStream?: IMediaStream | null;
+  localStream?: MediaStream | null;
   localParticipantName?: string;
   isAudioEnabled?: boolean;
   isVideoEnabled?: boolean;
@@ -16,80 +17,36 @@ interface VideoGridProps {
 }
 
 interface VideoTileProps {
-  participant: Participant;
-  stream?: IMediaStream | null;
+  participant: Participant | {
+    id: string;
+    name: string;
+    role: "host" | "participant";
+    status: "connecting" | "waiting" | "connected" | "disconnected";
+    hasVideo: boolean;
+    hasAudio: boolean;
+    joinedAt: number;
+    stream?: MediaStream | null;
+  };
+  stream?: MediaStream | null;
   isLocal?: boolean;
 }
 
 function VideoTile({ participant, stream, isLocal = false }: VideoTileProps) {
-  const videoRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
-  const [isVideoReady, setIsVideoReady] = useState(false);
-
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-      setIsVideoReady(true);
-    }
-  }, [stream]);
-
   return (
     <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
-      {/* Video element */}
-      {stream && isVideoReady ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className="w-full h-full object-cover"
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-gray-800">
-          <div className="text-center">
-            <VideoOff className="w-12 h-12 text-gray-600 mx-auto mb-2" />
-            <p className="text-gray-400 text-sm">
-              {isLocal ? "Your camera is off" : `${participant.name}'s camera is off`}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Participant info overlay */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-semibold">
-                {participant.name.charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <div>
-              <p className="text-white text-sm font-medium">
-                {isLocal ? "You" : participant.name}
-              </p>
-              <div className="flex items-center space-x-1">
-                {participant.hasAudio !== false && (
-                  <Mic className="w-3 h-3 text-green-400" />
-                )}
-                {participant.hasVideo !== false && (
-                  <Video className="w-3 h-3 text-green-400" />
-                )}
-              </div>
-            </div>
-          </div>
-          {isLocal && (
-            <div className="bg-blue-600 text-white text-xs px-2 py-1 rounded">
-              Host
-            </div>
-          )}
-        </div>
-      </div>
-
+      <VideoPlayer
+        stream={stream || null}
+        isLocal={isLocal}
+        name={isLocal ? "You" : participant.name}
+        className="w-full h-full"
+        hasAudio={participant.hasAudio}
+      />
+      
       {/* Connection status indicator */}
       <div className="absolute top-2 right-2">
         <div className={`w-3 h-3 rounded-full ${
-          participant.status === "connected" 
-            ? "bg-green-500" 
+          participant.status === "connected"
+            ? "bg-green-500"
             : participant.status === "connecting"
             ? "bg-yellow-500 animate-pulse"
             : "bg-red-500"
@@ -110,7 +67,16 @@ export function VideoGrid({
   className = "",
 }: VideoGridProps) {
   const [layout, setLayout] = useState<"grid" | "spotlight">("grid");
-  const [spotlightParticipant, setSpotlightParticipant] = useState<Participant | null>(null);
+  const [spotlightParticipant, setSpotlightParticipant] = useState<Participant | {
+    id: string;
+    name: string;
+    role: "host" | "participant";
+    status: "connecting" | "waiting" | "connected" | "disconnected";
+    hasVideo: boolean;
+    hasAudio: boolean;
+    joinedAt: number;
+    stream?: MediaStream | null;
+  } | null>(null);
 
   const allParticipants = [
     {
@@ -121,6 +87,7 @@ export function VideoGrid({
       hasVideo: isVideoEnabled,
       hasAudio: isAudioEnabled,
       joinedAt: Date.now(),
+      stream: localStream,
     },
     ...participants,
   ];
@@ -141,7 +108,7 @@ export function VideoGrid({
         <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video">
           <VideoTile
             participant={spotlightParticipant}
-            stream={spotlightParticipant.id === "local" ? localStream : spotlightParticipant.stream}
+            stream={spotlightParticipant.id === "local" ? localStream : (spotlightParticipant.stream || null)}
             isLocal={spotlightParticipant.id === "local"}
           />
         </div>
@@ -173,7 +140,7 @@ export function VideoGrid({
               >
                 <VideoTile
                   participant={participant}
-                  stream={participant.id === "local" ? localStream : participant.stream}
+                  stream={participant.id === "local" ? localStream : (participant.stream || null)}
                   isLocal={participant.id === "local"}
                 />
               </button>
@@ -229,7 +196,7 @@ export function VideoGrid({
           >
             <VideoTile
               participant={participant}
-              stream={participant.id === "local" ? localStream : participant.stream}
+              stream={participant.id === "local" ? localStream : (participant.stream || null)}
               isLocal={participant.id === "local"}
             />
           </div>

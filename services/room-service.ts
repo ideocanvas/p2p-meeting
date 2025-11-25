@@ -1,5 +1,5 @@
-import { RoomData, PublicRoomInfo } from '@/lib/types'
-import { kvHelper } from '@/lib/kv-helper'
+import { RoomData, PublicRoomInfo, SimplifiedRoom } from '@/lib/types'
+import { KVHelper } from '@/lib/kv-helper'
 
 export const roomService = {
   async createRoom(title: string, masterPassword: string): Promise<RoomData> {
@@ -15,6 +15,7 @@ export const roomService = {
     }
 
     try {
+      const kvHelper = KVHelper.getInstance();
       await kvHelper.put(`room:${id}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 }) // 24h expiry
     } catch (error) {
       console.error('Failed to save room to KV:', error)
@@ -26,6 +27,7 @@ export const roomService = {
 
   async getRoom(id: string): Promise<RoomData | null> {
     try {
+      const kvHelper = KVHelper.getInstance();
       const data = await kvHelper.get(`room:${id}`)
       return data ? JSON.parse(data) : null
     } catch (error) {
@@ -51,6 +53,7 @@ export const roomService = {
     if (room) {
       room.hostPeerId = peerId
       try {
+        const kvHelper = KVHelper.getInstance();
         await kvHelper.put(`room:${id}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 })
       } catch (error) {
         console.error('Failed to update room in KV:', error)
@@ -84,6 +87,7 @@ export const roomService = {
     room.participants.push(participant)
 
     try {
+      const kvHelper = KVHelper.getInstance();
       await kvHelper.put(`room:${roomId}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 })
       return { success: true, participantId }
     } catch (error) {
@@ -107,11 +111,63 @@ export const roomService = {
     participant.status = 'active'
 
     try {
+      const kvHelper = KVHelper.getInstance();
       await kvHelper.put(`room:${roomId}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 })
       return { success: true }
     } catch (error) {
       console.error('Failed to approve participant:', error)
       return { success: false, error: 'Failed to approve participant' }
+    }
+  },
+
+  async endMeeting(roomId: string, password: string): Promise<{ success: boolean; error?: string }> {
+    const room = await this.getRoom(roomId)
+    if (!room) {
+      return { success: false, error: 'Room not found' }
+    }
+
+    if (!this.verifyMasterPassword(roomId, password)) {
+      return { success: false, error: 'Invalid password' }
+    }
+
+    try {
+      // Delete the room from KV
+      const kvHelper = KVHelper.getInstance();
+      await kvHelper.delete(`room:${roomId}`)
+      return { success: true }
+    } catch (error) {
+      console.error('Failed to end meeting:', error)
+      return { success: false, error: 'Failed to end meeting' }
+    }
+  },
+
+  async hostReconnect(roomId: string, password: string, hostPeerId: string): Promise<{ success: boolean; room?: SimplifiedRoom; error?: string }> {
+    const room = await this.getRoom(roomId)
+    if (!room) {
+      return { success: false, error: 'Room not found' }
+    }
+
+    if (!this.verifyMasterPassword(roomId, password)) {
+      return { success: false, error: 'Invalid password' }
+    }
+
+    try {
+      // Update host peer ID
+      await this.updateHostPeerId(roomId, hostPeerId)
+      
+      const simplifiedRoom: SimplifiedRoom = {
+        id: room.id,
+        title: room.title,
+        status: 'active',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        participantCount: room.participants.filter(p => p.status === 'active').length,
+        hostConnected: !!hostPeerId
+      }
+      
+      return { success: true, room: simplifiedRoom }
+    } catch (error) {
+      console.error('Failed to reconnect host:', error)
+      return { success: false, error: 'Failed to reconnect host' }
     }
   },
 

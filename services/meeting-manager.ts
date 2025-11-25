@@ -3,7 +3,6 @@
 import Peer, { DataConnection, MediaConnection } from "peerjs";
 import { Participant, ConnectionState, ChatMessage } from "@/lib/types";
 
-// Configuration
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" }
@@ -21,15 +20,16 @@ type Message =
 class MeetingManager {
   private static instance: MeetingManager;
   private peer: Peer | null = null;
+  
+  // We keep the raw tracks separate from the stream object to manage them better
   private localStream: MediaStream | null = null;
   private screenStream: MediaStream | null = null;
-  
-  // Keep track of all connections
+  private _isToggling: boolean = false;
+
   private connections: Map<string, DataConnection> = new Map();
   private calls: Map<string, MediaConnection> = new Map();
   private trackMonitoringIntervals: Map<string, NodeJS.Timeout> = new Map(); 
-  
-  // State
+
   public state: {
     connectionState: ConnectionState;
     participants: Participant[];
@@ -68,7 +68,10 @@ class MeetingManager {
 
   async initializeMedia() {
     try {
+      // 1. Acquire hardware ONCE. Keep it alive.
       this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      
+      this.attachLocalTrackListeners();
       this.state.isAudioMuted = false;
       this.state.isVideoMuted = false;
       this.notify();
@@ -79,42 +82,114 @@ class MeetingManager {
     }
   }
 
+  private attachLocalTrackListeners() {
+    if (!this.localStream) return;
+
+    this.localStream.getVideoTracks().forEach(track => {
+      track.onended = () => {
+        // This only fires if hardware is physically disconnected or permission revoked
+        console.log("Video track ended (Hardware/System)");
+        this.state.isVideoMuted = true;
+        this.broadcastStatusUpdate();
+        this.notify();
+      };
+    });
+
+    this.localStream.getAudioTracks().forEach(track => {
+      track.onended = () => {
+        console.log("Audio track ended (Hardware/System)");
+        this.state.isAudioMuted = true;
+        this.broadcastStatusUpdate();
+        this.notify();
+      };
+    });
+  }
+
   // --- MEDIA CONTROLS ---
 
   toggleAudio() {
-    if (this.localStream) {
-      const audioTracks = this.localStream.getAudioTracks();
-      if (audioTracks.length > 0) {
-        const newEnabledState = !audioTracks[0].enabled;
-        audioTracks.forEach(t => t.enabled = newEnabledState);
-        this.state.isAudioMuted = !newEnabledState;
-        this.updateLocalParticipantState();
-        this.broadcastStatusUpdate();
-        this.notify();
-      }
+    if (!this.localStream) return;
+    const audioTrack = this.localStream.getAudioTracks()[0];
+    
+    if (audioTrack) {
+      // Soft toggle: just stop sending data, keep hardware active
+      audioTrack.enabled = !audioTrack.enabled;
+      this.state.isAudioMuted = !audioTrack.enabled;
+      
+      this.updateLocalParticipantState();
+      this.broadcastStatusUpdate();
+      this.notify();
     }
   }
 
-  toggleVideo() {
-    if (this.state.isScreenSharing) {
-      this.stopScreenShare();
-      return;
-    }
+  async toggleVideo() {
+    if (this._isToggling) return;
+    this._isToggling = true;
 
-    if (this.localStream) {
-      const videoTracks = this.localStream.getVideoTracks();
-      if (videoTracks.length > 0) {
-        const newEnabledState = !videoTracks[0].enabled;
-        videoTracks.forEach(t => t.enabled = newEnabledState);
-        this.state.isVideoMuted = !newEnabledState;
+    try {
+      // Handle Screen Share case
+      if (this.state.isScreenSharing) {
+        await this.stopScreenShare();
+        this._isToggling = false;
+        return;
+      }
+
+      // 1. Check if we have a stream
+      if (!this.localStream) {
+        await this.initializeMedia();
+        this._isToggling = false;
+        return;
+      }
+
+      const videoTrack = this.localStream.getVideoTracks()[0];
+
+      if (videoTrack) {
+        // --- SOFT TOGGLE START ---
+        // We simply flip the 'enabled' switch.
+        // false = sends black frames (mute).
+        // true = sends camera frames.
+        // We NEVER call track.stop(). The camera light will stay on.
+        videoTrack.enabled = !videoTrack.enabled;
+        
+        this.state.isVideoMuted = !videoTrack.enabled;
+
+        // CRITICAL: We create a NEW MediaStream object reference.
+        // Even though the track is the same, this forces React to detect a change
+        // and re-run any useEffects attached to the <video> element.
+        this.localStream = new MediaStream(this.localStream.getTracks());
+        
+        this.updateLocalParticipantState();
+        this.broadcastStatusUpdate();
+        this.notify();
+        // --- SOFT TOGGLE END ---
+      } else {
+        // Fallback: If track is missing (e.g. started audio-only), we must get one.
+        console.log("No video track found. Acquiring...");
+        const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const newTrack = newStream.getVideoTracks()[0];
+        
+        // Add to our persistent stream
+        this.localStream.addTrack(newTrack);
+        
+        // We have to "replace" the track in existing calls because it's a new ID
+        await this.replaceVideoTrack(newTrack);
+        
+        this.state.isVideoMuted = false;
         this.updateLocalParticipantState();
         this.broadcastStatusUpdate();
         this.notify();
       }
+    } catch (e) {
+      console.error("Toggle Video Error", e);
+    } finally {
+      this._isToggling = false;
     }
   }
 
   async startScreenShare() {
+    if (this._isToggling) return;
+    this._isToggling = true;
+
     try {
       if (this.state.isScreenSharing) return;
 
@@ -125,49 +200,88 @@ class MeetingManager {
         this.stopScreenShare();
       };
 
-      if (this.localStream) {
-        this.calls.forEach((call) => {
-          const sender = call.peerConnection.getSenders().find((s) => s.track?.kind === "video");
-          if (sender) {
-            sender.replaceTrack(screenVideoTrack);
-          }
-        });
+      // Replace the camera track with the screen track in all connections
+      await this.replaceVideoTrack(screenVideoTrack);
         
-        this.state.isScreenSharing = true;
-        this.state.isVideoMuted = false; 
-        this.updateLocalParticipantState();
-        this.broadcastStatusUpdate();
-        this.notify();
-      }
+      this.state.isScreenSharing = true;
+      this.state.isVideoMuted = false; 
+      
+      this.updateLocalParticipantState();
+      this.broadcastStatusUpdate();
+      this.notify();
+      
     } catch (err) {
       console.error("Failed to share screen", err);
+    } finally {
+      this._isToggling = false;
     }
   }
 
-  stopScreenShare() {
-    if (!this.state.isScreenSharing || !this.localStream) return;
+  async stopScreenShare() {
+    if (!this.state.isScreenSharing) return;
 
+    // Stop the screen share tracks (this ends the "Sharing" browser UI)
     this.screenStream?.getTracks().forEach(t => t.stop());
     this.screenStream = null;
 
-    const cameraTrack = this.localStream.getVideoTracks()[0];
-    
-    if (cameraTrack) {
-        cameraTrack.enabled = true;
-        this.state.isVideoMuted = false;
-
-        this.calls.forEach((call) => {
-            const sender = call.peerConnection.getSenders().find((s) => s.track?.kind === "video");
-            if (sender) {
-                sender.replaceTrack(cameraTrack);
+    try {
+        // Go back to Camera
+        if (this.localStream) {
+            const camTrack = this.localStream.getVideoTracks()[0];
+            
+            // Should we unmute when returning from screen share? Usually yes.
+            if (camTrack) {
+                camTrack.enabled = true;
+                await this.replaceVideoTrack(camTrack);
+                this.state.isVideoMuted = false;
+            } else {
+                // If camera track somehow died, re-init
+                await this.initializeMedia();
             }
-        });
+        }
+    } catch (e) {
+        console.error("Failed to revert to camera", e);
     }
 
     this.state.isScreenSharing = false;
     this.updateLocalParticipantState();
     this.broadcastStatusUpdate();
     this.notify();
+  }
+
+  /**
+   * Replaces the video track in all active connections.
+   * Used primarily for switching between Camera and Screen Share.
+   */
+  private async replaceVideoTrack(newTrack: MediaStreamTrack) {
+    // 1. Update local stream object for React
+    if (this.localStream) {
+        const audioTracks = this.localStream.getAudioTracks();
+        // Create new stream with existing audio + NEW video
+        this.localStream = new MediaStream([...audioTracks, newTrack]);
+    }
+
+    // 2. Update Peer Connections
+    const replacePromises = Array.from(this.calls.values()).map(async (call) => {
+      const pc = call.peerConnection;
+      if (!pc || pc.connectionState === 'closed') return;
+
+      // Robust Sender Finding:
+      // We look for a sender that is NOT audio.
+      const senders = pc.getSenders();
+      const videoSender = senders.find(s => s.track?.kind === 'video') 
+                          || senders.find(s => s.track?.kind !== 'audio');
+
+      if (videoSender) {
+        try {
+          await videoSender.replaceTrack(newTrack);
+        } catch (e) {
+          console.error(`Failed to replace track for peer ${call.peer}`, e);
+        }
+      }
+    });
+
+    await Promise.all(replacePromises);
   }
 
   // --- MESSAGING ---
@@ -197,9 +311,7 @@ class MeetingManager {
     });
 
     this.connections.forEach(conn => {
-      if (conn.open) {
-        conn.send(message);
-      }
+      if (conn.open) conn.send(message);
     });
 
     this.notify();
@@ -220,15 +332,14 @@ class MeetingManager {
 
       if (this.isHost()) {
         this.connections.forEach(conn => {
-            if (conn.peer !== peerId && conn.open) {
-                conn.send(msg);
-            }
+            if (conn.peer !== peerId && conn.open) conn.send(msg);
         });
       }
     }
     else if (msg.type === 'status-update') {
       const participant = this.state.participants.find(p => p.id === peerId);
       if (participant) {
+        // Update data state
         participant.hasVideo = msg.hasVideo;
         participant.hasAudio = msg.hasAudio;
         participant.isScreenSharing = msg.isScreenSharing;
@@ -236,7 +347,6 @@ class MeetingManager {
       }
     }
     else if (msg.type === 'active-peers') {
-        console.log("Received active peers list:", msg.peers);
         msg.peers.forEach(p => {
             if (p.id !== this.getPeerId()) {
                 this.connectToPeer(p.id, p.name);
@@ -251,6 +361,8 @@ class MeetingManager {
   private broadcastStatusUpdate() {
     const update: Message = {
       type: 'status-update',
+      // Send our logical state. 
+      // Even if track is technically "enabled" but we are switching, use this truth.
       hasVideo: !this.state.isVideoMuted,
       hasAudio: !this.state.isAudioMuted,
       isScreenSharing: this.state.isScreenSharing
@@ -261,7 +373,7 @@ class MeetingManager {
     });
   }
 
-  // --- HOST LOGIC ---
+  // --- HOST / JOIN LOGIC (Standard) ---
 
   async startHosting(roomId: string, authToken: string, name: string, isApiKey: boolean = false) {
     if (!this.localStream) await this.initializeMedia();
@@ -269,106 +381,31 @@ class MeetingManager {
     this.peer = new Peer({ config: { iceServers: ICE_SERVERS } });
 
     this.peer.on('open', async (id) => {
-      try {
-        if (isApiKey) {
-            await fetch(`/api/rooms/${roomId}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify({ hostPeerId: id })
-            });
-        } else {
-            await fetch(`/api/rooms/${roomId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: authToken, hostPeerId: id })
-            });
-        }
-      } catch (e) {
-          console.error("Failed to register host", e);
-      }
-      
-      this.state.connectionState = 'active';
-      this.state.participants = [{
-        id,
-        name,
-        role: 'host',
-        status: 'connected',
-        hasAudio: !this.state.isAudioMuted,
-        hasVideo: !this.state.isVideoMuted,
-        isScreenSharing: false
-      }];
-      this.notify();
+        try {
+            const body = isApiKey 
+                ? { hostPeerId: id } 
+                : { password: authToken, hostPeerId: id };
+            
+            const headers: HeadersInit = { 'Content-Type': 'application/json' };
+            if (isApiKey) headers['Authorization'] = `Bearer ${authToken}`;
+
+            await fetch(`/api/rooms/${roomId}`, { method: 'POST', headers, body: JSON.stringify(body) });
+        } catch(e) { console.error(e); }
+
+        this.state.connectionState = 'active';
+        this.state.participants = [{
+            id, name, role: 'host', status: 'connected',
+            hasAudio: !this.state.isAudioMuted, hasVideo: !this.state.isVideoMuted, isScreenSharing: false
+        }];
+        this.notify();
     });
 
-    this.peer.on('connection', (conn) => {
-      this.setupDataConnection(conn);
-    });
-
+    this.peer.on('connection', (conn) => this.setupDataConnection(conn));
     this.peer.on('call', (call) => {
-      call.answer(this.localStream!);
-      this.setupCall(call);
+        call.answer(this.localStream!);
+        this.setupCall(call);
     });
   }
-
-  approveParticipant(peerId: string) {
-    const waiterIndex = this.state.waitingPeers.findIndex(p => p.peerId === peerId);
-    if (waiterIndex === -1) return;
-    
-    const waiter = this.state.waitingPeers[waiterIndex];
-    
-    // 1. Send accepted message
-    waiter.conn.send({ type: 'join-accepted' });
-
-    // 2. Prepare list of EXISTING peers to send to the NEW guy
-    const existingPeers = this.state.participants
-        .filter(p => p.id !== this.getPeerId() && p.id !== peerId)
-        .map(p => ({ id: p.id, name: p.name }));
-
-    // 3. Send the list so New guy can call them (Mesh)
-    if (existingPeers.length > 0) {
-        setTimeout(() => {
-            waiter.conn.send({ type: 'active-peers', peers: existingPeers });
-        }, 500); 
-    }
-
-    // 4. Host initiates Call to New Guy
-    const myName = this.state.participants.find(p => p.id === this.getPeerId())?.name || "Host";
-    const call = this.peer!.call(peerId, this.localStream!, {
-        metadata: { name: myName }
-    });
-    
-    // 5. Update state using setupCall to avoid duplicates
-    this.setupCall(call, waiter.name);
-
-    // 6. Ensure role is correct (setupCall defaults to participant, but just in case)
-    const p = this.state.participants.find(p => p.id === peerId);
-    if (p) {
-        p.role = 'participant';
-        p.status = 'connected';
-    }
-    
-    this.addSystemMessage(`${waiter.name} joined the meeting`);
-    
-    this.state.waitingPeers.splice(waiterIndex, 1);
-    this.notify();
-  }
-
-  rejectParticipant(peerId: string) {
-    const waiterIndex = this.state.waitingPeers.findIndex(p => p.peerId === peerId);
-    if (waiterIndex === -1) return;
-    
-    const waiter = this.state.waitingPeers[waiterIndex];
-    waiter.conn.send({ type: 'join-rejected' });
-    waiter.conn.close();
-    
-    this.state.waitingPeers.splice(waiterIndex, 1);
-    this.notify();
-  }
-
-  // --- PARTICIPANT LOGIC ---
 
   async joinRoom(hostPeerId: string, name: string) {
     if (!this.localStream) await this.initializeMedia();
@@ -377,39 +414,71 @@ class MeetingManager {
     this.state.connectionState = 'connecting';
     this.notify();
 
-    this.peer.on('open', (id) => {
+    this.peer.on('open', () => {
       const conn = this.peer!.connect(hostPeerId);
       this.setupDataConnection(conn, name);
     });
 
     this.peer.on('call', (call) => {
       call.answer(this.localStream!);
-      
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const callerName = (call.metadata as any)?.name || "Participant";
-      
       this.setupCall(call, callerName);
-      
-      if (this.state.connectionState !== 'active') {
-          this.state.connectionState = 'active';
-      }
+      if (this.state.connectionState !== 'active') this.state.connectionState = 'active';
       this.notify();
     });
   }
 
-  connectToPeer(peerId: string, name: string) {
-    if (!this.localStream || !this.peer) return;
+  approveParticipant(peerId: string) {
+    const waiterIndex = this.state.waitingPeers.findIndex(w => w.peerId === peerId);
+    if (waiterIndex === -1) return;
+    const waiter = this.state.waitingPeers[waiterIndex];
+
+    if (!this.state.participants.some(p => p.id === peerId)) {
+      this.state.participants.push({
+        id: peerId, name: waiter.name, role: 'participant', status: 'connecting',
+        hasAudio: true, hasVideo: true, isScreenSharing: false
+      });
+    }
+
+    waiter.conn.send({ type: 'join-accepted' });
+
+    const existingPeers = this.state.participants
+        .filter(p => p.id !== this.getPeerId() && p.id !== peerId)
+        .map(p => ({ id: p.id, name: p.name }));
+
+    if (existingPeers.length > 0) {
+        setTimeout(() => { if (waiter.conn.open) waiter.conn.send({ type: 'active-peers', peers: existingPeers }); }, 500);
+    }
 
     const myName = this.getMyName();
+    const call = this.peer!.call(peerId, this.localStream!, { metadata: { name: myName } });
+    this.setupCall(call, waiter.name);
+
+    const p = this.state.participants.find(p => p.id === peerId);
+    if (p) { p.role = 'participant'; p.status = 'connected'; }
     
-    const call = this.peer.call(peerId, this.localStream, {
-        metadata: { name: myName }
-    });
-    
-    this.setupCall(call, name);
+    this.addSystemMessage(`${waiter.name} joined the meeting`);
+    this.state.waitingPeers.splice(waiterIndex, 1);
+    this.notify();
   }
 
-  // --- INTERNAL UTILS ---
+  rejectParticipant(peerId: string) {
+    const waiterIndex = this.state.waitingPeers.findIndex(p => p.peerId === peerId);
+    if (waiterIndex === -1) return;
+    const waiter = this.state.waitingPeers[waiterIndex];
+    waiter.conn.send({ type: 'join-rejected' });
+    waiter.conn.close();
+    this.state.waitingPeers.splice(waiterIndex, 1);
+    this.notify();
+  }
+
+  connectToPeer(peerId: string, name: string) {
+    if (!this.localStream || !this.peer || this.calls.has(peerId)) return;
+    const myName = this.getMyName();
+    const call = this.peer.call(peerId, this.localStream, { metadata: { name: myName } });
+    this.setupCall(call, name);
+  }
 
   private setupDataConnection(conn: DataConnection, joinName?: string) {
     conn.on('open', () => {
@@ -417,92 +486,60 @@ class MeetingManager {
         this.state.connectionState = 'waiting';
         this.notify();
         conn.send({ type: 'join-request', name: joinName });
-      }
-      this.broadcastStatusUpdate();
-    });
-
-    conn.on('data', (data: unknown) => {
-      const msg = data as Message;
-      
-      if (msg.type === 'join-request') {
-        this.state.waitingPeers.push({ peerId: conn.peer, name: msg.name, conn });
-        this.notify();
-      } else if (msg.type === 'join-accepted') {
-        this.state.connectionState = 'connected';
-        // Check if Host entry exists before pushing to avoid duplicates
-        if (!this.state.participants.some(p => p.id === conn.peer)) {
-            this.state.participants.push({
-                id: conn.peer,
-                name: "Host", 
-                role: 'host',
-                status: 'connected',
-                hasAudio: true,
-                hasVideo: true,
-                isScreenSharing: false
-            });
-        }
-        this.notify();
-      } else if (msg.type === 'join-rejected') {
-        this.state.error = "Host rejected your request";
-        this.state.connectionState = 'disconnected';
-        this.notify();
-        conn.close();
       } else {
-        this.handleDataMessage(data, conn.peer);
+        this.broadcastStatusUpdate();
       }
     });
 
-    conn.on('close', () => {
-       this.handlePeerDisconnection(conn.peer);
-    });
-    
-    conn.on('error', () => {
-       this.handlePeerDisconnection(conn.peer);
+    conn.on('data', (data) => {
+        const msg = data as Message;
+        if (msg.type === 'join-request') {
+            this.state.waitingPeers.push({ peerId: conn.peer, name: msg.name, conn });
+            this.notify();
+        } else if (msg.type === 'join-accepted') {
+            this.state.connectionState = 'connected';
+            if (!this.state.participants.some(p => p.id === conn.peer)) {
+                this.state.participants.push({
+                    id: conn.peer, name: "Host", role: 'host', status: 'connected',
+                    hasAudio: true, hasVideo: true, isScreenSharing: false
+                });
+            }
+            this.notify();
+        } else if (msg.type === 'join-rejected') {
+            this.state.error = "Host rejected your request";
+            this.state.connectionState = 'disconnected';
+            this.notify();
+            conn.close();
+        } else {
+            this.handleDataMessage(data, conn.peer);
+        }
     });
 
+    conn.on('close', () => this.handlePeerDisconnection(conn.peer));
+    conn.on('error', (e) => { console.error(e); this.handlePeerDisconnection(conn.peer); });
     this.connections.set(conn.peer, conn);
   }
 
   private setupCall(call: MediaConnection, nameOverride?: string) {
-    let p = this.state.participants.find(p => p.id === call.peer);
-    
-    if (!p) {
-        // Create new participant entry if one doesn't exist
-        p = {
-          id: call.peer,
-          name: nameOverride || "User",
-          role: 'participant',
-          status: 'connected',
-          hasAudio: true,
-          hasVideo: true,
-          isScreenSharing: false
+    let participant = this.state.participants.find(p => p.id === call.peer);
+    if (!participant) {
+        participant = {
+            id: call.peer, name: nameOverride || "User", role: 'participant', status: 'connected',
+            hasAudio: true, hasVideo: true, isScreenSharing: false
         };
-        this.state.participants.push(p);
-    } else {
-        // Update existing entry
-        if (nameOverride) p.name = nameOverride;
-        p.status = 'connected';
-    }
+        this.state.participants.push(participant);
+    } else if (nameOverride) participant.name = nameOverride;
 
     call.on('stream', (remoteStream) => {
-      const participant = this.state.participants.find(p => p.id === call.peer);
-      if (participant) {
-        participant.stream = remoteStream;
-        participant.hasVideo = remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks()[0].enabled;
-        participant.hasAudio = remoteStream.getAudioTracks().length > 0 && remoteStream.getAudioTracks()[0].enabled;
+      const p = this.state.participants.find(part => part.id === call.peer);
+      if (p) {
+        p.stream = remoteStream;
         this.notify();
       }
     });
 
-    call.on('close', () => {
-      this.handlePeerDisconnection(call.peer);
-    });
-    
-    call.on('error', (err) => {
-      console.error("Call error", err);
-      this.handlePeerDisconnection(call.peer);
-    });
-
+    call.on('close', () => this.handlePeerDisconnection(call.peer));
+    call.on('error', (e) => { console.error(e); this.handlePeerDisconnection(call.peer); });
     this.calls.set(call.peer, call);
     this.notify();
   }
@@ -510,29 +547,19 @@ class MeetingManager {
   private handlePeerDisconnection(peerId: string) {
       if (this.isHost()) {
           this.connections.forEach(conn => {
-              if (conn.open && conn.peer !== peerId) {
-                  conn.send({ type: 'peer-left', peerId });
-              }
+              if (conn.open && conn.peer !== peerId) conn.send({ type: 'peer-left', peerId });
           });
       }
+      const p = this.state.participants.find(part => part.id === peerId);
+      if (p) this.addSystemMessage(`${p.name} left the meeting`);
 
-      const participant = this.state.participants.find(p => p.id === peerId);
-      if (participant) {
-        this.addSystemMessage(`${participant.name} left the meeting`);
-      }
-
-      this.state.participants = this.state.participants.filter(p => p.id !== peerId);
-      this.state.waitingPeers = this.state.waitingPeers.filter(p => p.peerId !== peerId);
-      
+      this.state.participants = this.state.participants.filter(part => part.id !== peerId);
+      this.state.waitingPeers = this.state.waitingPeers.filter(w => w.peerId !== peerId);
       this.connections.delete(peerId);
       this.calls.delete(peerId);
       
       const interval = this.trackMonitoringIntervals.get(peerId);
-      if (interval) {
-        clearInterval(interval);
-        this.trackMonitoringIntervals.delete(peerId);
-      }
-
+      if (interval) { clearInterval(interval); this.trackMonitoringIntervals.delete(peerId); }
       this.notify();
   }
 
@@ -548,54 +575,41 @@ class MeetingManager {
 
   private addSystemMessage(text: string) {
       this.state.messages.push({
-          id: Date.now().toString(),
-          senderId: 'system',
-          senderName: 'System',
-          text,
-          timestamp: Date.now(),
-          isSystem: true
+          id: Date.now().toString(), senderId: 'system', senderName: 'System', text, timestamp: Date.now(), isSystem: true
       });
       this.notify();
   }
 
   getLocalStream() {
-      return this.state.isScreenSharing && this.screenStream ? this.screenStream : this.localStream;
+      if (this.state.isScreenSharing && this.screenStream) return this.screenStream;
+      return this.localStream;
   }
   
   getPeerId() { return this.peer?.id; }
   
-  getMyName() {
-      return this.state.participants.find(p => p.id === this.getPeerId())?.name || "Me";
-  }
+  getMyName() { return this.state.participants.find(p => p.id === this.getPeerId())?.name || "Me"; }
 
-  isHost() {
-      return this.state.participants.find(p => p.id === this.getPeerId())?.role === 'host';
-  }
+  isHost() { return this.state.participants.find(p => p.id === this.getPeerId())?.role === 'host'; }
 
   leave() {
-    this.connections.forEach(conn => {
-        if(conn.open) conn.close();
-    });
-    this.calls.forEach(call => {
-        call.close();
-    });
-
-    this.trackMonitoringIntervals.forEach(intervalId => clearInterval(intervalId));
+    if (this.isHost()) {
+      const myId = this.getPeerId();
+      this.connections.forEach(conn => { if (conn.open) conn.send({ type: 'peer-left', peerId: myId || '' }); });
+    }
+    this.connections.forEach(c => c.close());
+    this.calls.forEach(c => c.close());
+    this.trackMonitoringIntervals.forEach(i => clearInterval(i));
     this.trackMonitoringIntervals.clear();
     
     this.peer?.destroy();
     this.localStream?.getTracks().forEach(t => t.stop());
     this.screenStream?.getTracks().forEach(t => t.stop());
     
+    this.connections.clear();
+    this.calls.clear();
     this.state = {
-      connectionState: 'disconnected',
-      participants: [],
-      waitingPeers: [],
-      messages: [],
-      error: null,
-      isAudioMuted: false,
-      isVideoMuted: false,
-      isScreenSharing: false
+      connectionState: 'disconnected', participants: [], waitingPeers: [], messages: [], error: null,
+      isAudioMuted: false, isVideoMuted: false, isScreenSharing: false
     };
     this.notify();
   }
