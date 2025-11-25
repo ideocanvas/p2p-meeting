@@ -28,11 +28,15 @@ class MeetingManager {
     participants: Participant[];
     waitingPeers: { peerId: string; name: string; conn: DataConnection }[];
     error: string | null;
+    isAudioMuted: boolean;
+    isVideoMuted: boolean;
   } = {
     connectionState: 'disconnected',
     participants: [],
     waitingPeers: [],
-    error: null
+    error: null,
+    isAudioMuted: false,
+    isVideoMuted: false
   };
 
   private listeners: (() => void)[] = [];
@@ -54,6 +58,9 @@ class MeetingManager {
   async initializeMedia() {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Initialize audio/video state
+      this.state.isAudioMuted = false;
+      this.state.isVideoMuted = false;
       this.notify();
     } catch (e) {
       console.error("Media error", e);
@@ -64,15 +71,47 @@ class MeetingManager {
 
   toggleAudio() {
     if (this.localStream) {
-      this.localStream.getAudioTracks().forEach(t => t.enabled = !t.enabled);
-      this.notify(); // Force re-render to update icons
+      const audioTracks = this.localStream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        const newEnabledState = !audioTracks[0].enabled;
+        audioTracks.forEach(t => t.enabled = newEnabledState);
+        this.state.isAudioMuted = !newEnabledState;
+        
+        // Update the local participant's audio state
+        const localParticipant = this.state.participants.find(p => p.id === this.getPeerId());
+        if (localParticipant) {
+          localParticipant.hasAudio = newEnabledState;
+        }
+        
+        this.notify(); // Force re-render to update icons
+      }
     }
+  }
+
+  isMuted() {
+    return this.state.isAudioMuted;
+  }
+
+  isVideoOff() {
+    return this.state.isVideoMuted;
   }
 
   toggleVideo() {
     if (this.localStream) {
-      this.localStream.getVideoTracks().forEach(t => t.enabled = !t.enabled);
-      this.notify();
+      const videoTracks = this.localStream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        const newEnabledState = !videoTracks[0].enabled;
+        videoTracks.forEach(t => t.enabled = newEnabledState);
+        this.state.isVideoMuted = !newEnabledState;
+        
+        // Update the local participant's video state
+        const localParticipant = this.state.participants.find(p => p.id === this.getPeerId());
+        if (localParticipant) {
+          localParticipant.hasVideo = newEnabledState;
+        }
+        
+        this.notify();
+      }
     }
   }
 
@@ -105,7 +144,14 @@ class MeetingManager {
       }
       
       this.state.connectionState = 'active';
-      this.state.participants = [{ id, name, role: 'host', status: 'connected', hasAudio: true, hasVideo: true }];
+      this.state.participants = [{
+        id,
+        name,
+        role: 'host',
+        status: 'connected',
+        hasAudio: !this.state.isAudioMuted,
+        hasVideo: !this.state.isVideoMuted
+      }];
       this.notify();
     });
 
@@ -289,7 +335,9 @@ class MeetingManager {
       connectionState: 'disconnected',
       participants: [],
       waitingPeers: [],
-      error: null
+      error: null,
+      isAudioMuted: false,
+      isVideoMuted: false
     };
     (MeetingManager as any).instance = null;
     this.notify();

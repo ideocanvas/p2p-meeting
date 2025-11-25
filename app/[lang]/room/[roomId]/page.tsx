@@ -6,11 +6,12 @@ import MeetingManager from '@/services/meeting-manager'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Check, X, Users, Lock, User, Key, Home } from 'lucide-react'
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Check, X, Users, Lock, User, Key, Home, Share2, QrCode, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { PublicRoomInfo, Participant } from '@/lib/types'
 import { secureStorage } from '@/lib/secure-storage'
 import { SiteHeader } from '@/components/site-header'
+import { QRCodeGenerator } from '@/components/qr-code-generator'
 
 // ParticipantVideo component with proper cleanup
 function ParticipantVideo({ participant }: { participant: Participant }) {
@@ -63,15 +64,45 @@ export default function RoomPage() {
   const [password, setPassword] = useState('')
   const [isHost, setIsHost] = useState(false)
   const [isReady, setIsReady] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
   
   // Meeting State
   const manager = MeetingManager.getInstance()
   const [meetingState, setMeetingState] = useState(manager.state)
   const localVideoRef = useRef<HTMLVideoElement>(null)
 
+  const meetingLink = typeof window !== 'undefined'
+    ? `${window.location.origin}/${lang}/room/${roomId}`
+    : ''
+
   const handleGoHome = () => {
     manager.leave()
     router.push(`/${lang}`)
+  }
+
+  const handleShareMeeting = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `Join ${roomInfo?.title || 'Meeting'}`,
+          text: `Join my meeting room: ${roomInfo?.title || 'Meeting'}`,
+          url: meetingLink
+        })
+      } catch (error) {
+        console.log('Share canceled')
+      }
+    } else {
+      setShowShareModal(true)
+    }
+  }
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(meetingLink)
+      toast.success('Meeting link copied to clipboard')
+    } catch (error) {
+      toast.error('Failed to copy link')
+    }
   }
 
   // 1. Fetch Room Info on Load
@@ -205,17 +236,21 @@ export default function RoomPage() {
                     variant="secondary"
                     size="icon"
                     onClick={() => manager.toggleAudio()}
-                    className="bg-white/20 backdrop-blur-sm hover:bg-white/30 border-white/20 text-white"
+                    className={`backdrop-blur-sm hover:bg-white/30 border-white/20 text-white ${
+                      meetingState.isAudioMuted ? 'bg-red-500/30' : 'bg-white/20'
+                    }`}
                   >
-                    <Mic className="h-5 w-5" />
+                    {meetingState.isAudioMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                   </Button>
                   <Button
                     variant="secondary"
                     size="icon"
                     onClick={() => manager.toggleVideo()}
-                    className="bg-white/20 backdrop-blur-sm hover:bg-white/30 border-white/20 text-white"
+                    className={`backdrop-blur-sm hover:bg-white/30 border-white/20 text-white ${
+                      meetingState.isVideoMuted ? 'bg-red-500/30' : 'bg-white/20'
+                    }`}
                   >
-                    <VideoIcon className="h-5 w-5" />
+                    {meetingState.isVideoMuted ? <VideoOff className="h-5 w-5" /> : <VideoIcon className="h-5 w-5" />}
                   </Button>
                 </div>
                 <div className="absolute top-4 right-4 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-medium">
@@ -346,6 +381,14 @@ export default function RoomPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            onClick={handleShareMeeting}
+            className="text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200 px-4 py-2"
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            <span>Share</span>
+          </Button>
           <div className="text-right">
             <div className="text-sm text-gray-400">Participants</div>
             <div className="text-lg font-normal text-gray-200">
@@ -421,17 +464,21 @@ export default function RoomPage() {
           variant="secondary"
           size="icon"
           onClick={() => manager.toggleAudio()}
-          className="h-14 w-14 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full"
+          className={`h-14 w-14 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full ${
+            meetingState.isAudioMuted ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/30' : 'bg-white/10'
+          }`}
         >
-           <Mic className="h-6 w-6" />
+           {meetingState.isAudioMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
         </Button>
         <Button
           variant="secondary"
           size="icon"
           onClick={() => manager.toggleVideo()}
-          className="h-14 w-14 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full"
+          className={`h-14 w-14 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full ${
+            meetingState.isVideoMuted ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/30' : 'bg-white/10'
+          }`}
         >
-           <VideoIcon className="h-6 w-6" />
+           {meetingState.isVideoMuted ? <VideoOff className="h-6 w-6" /> : <VideoIcon className="h-6 w-6" />}
         </Button>
         <Button
           variant="destructive"
@@ -442,6 +489,68 @@ export default function RoomPage() {
            <PhoneOff className="h-6 w-6" />
         </Button>
       </div>
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-md bg-white/95 backdrop-blur-xl shadow-2xl border-0">
+            <CardHeader className="text-center pb-4">
+              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Share2 className="w-6 h-6 text-blue-600" />
+              </div>
+              <CardTitle className="text-xl font-bold">Share Meeting</CardTitle>
+              <p className="text-gray-500 text-sm">
+                Invite others to join "{roomInfo?.title}"
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <p className="text-xs text-gray-500 mb-2">Meeting Link</p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={meetingLink}
+                    readOnly
+                    className="bg-white border-gray-200 text-sm"
+                  />
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    onClick={handleCopyLink}
+                    className="shrink-0"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <p className="text-xs text-gray-500 mb-4">Scan QR Code</p>
+                <QRCodeGenerator
+                  url={meetingLink}
+                  size={200}
+                  scanText="Scan with mobile camera to join"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowShareModal(false)}
+                  className="flex-1"
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={handleCopyLink}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  Copy Link
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
