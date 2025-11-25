@@ -6,7 +6,7 @@ import MeetingManager from '@/services/meeting-manager'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Check, X, Users, Lock, User, Key } from 'lucide-react'
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Check, X, Users, Lock, User, Key, Home } from 'lucide-react'
 import { toast } from 'sonner'
 import { PublicRoomInfo, Participant } from '@/lib/types'
 import { secureStorage } from '@/lib/secure-storage'
@@ -67,6 +67,11 @@ export default function RoomPage() {
   const manager = MeetingManager.getInstance()
   const [meetingState, setMeetingState] = useState(manager.state)
   const localVideoRef = useRef<HTMLVideoElement>(null)
+
+  const handleGoHome = () => {
+    manager.leave()
+    router.push(`/${lang}`)
+  }
 
   // 1. Fetch Room Info on Load
   useEffect(() => {
@@ -173,7 +178,6 @@ export default function RoomPage() {
     }
   }, [meetingState.connectionState, phase])
 
-
   // --- RENDERERS ---
 
   if (!roomInfo) return <div className="flex h-screen items-center justify-center">Loading Room...</div>
@@ -181,62 +185,107 @@ export default function RoomPage() {
   // SETUP PHASE
   if (phase === 'setup') {
     return (
-      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-        <Card className="w-full max-w-2xl bg-white shadow-xl">
-          <CardHeader>
-            <CardTitle>{roomInfo.title}</CardTitle>
-            <p className="text-sm text-gray-500">Created {new Date(roomInfo.createdAt).toLocaleDateString()}</p>
-          </CardHeader>
-          <CardContent className="grid md:grid-cols-2 gap-6">
-            {/* Video Preview */}
-            <div className="bg-black rounded-lg aspect-video overflow-hidden relative">
-              <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
-              <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-2">
-                <Button variant="secondary" size="icon" onClick={() => manager.toggleAudio()}>
-                  <Mic className="h-4 w-4" />
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        {/* Header */}
+        <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={handleGoHome} className="flex items-center gap-2 px-4 py-2">
+                  <Home className="w-4 h-4" />
+                  <span>Home</span>
                 </Button>
-                <Button variant="secondary" size="icon" onClick={() => manager.toggleVideo()}>
-                  <VideoIcon className="h-4 w-4" />
-                </Button>
+                <div className="w-px h-6 bg-gray-300"></div>
+                <div>
+                  <h1 className="text-base font-normal text-gray-700">{roomInfo.title}</h1>
+                  <p className="text-gray-500 text-xs">Join meeting room</p>
+                </div>
               </div>
             </div>
+          </div>
+        </div>
+        
+        {/* Main Content */}
+        <div className="flex flex-col items-center justify-center p-4 min-h-[calc(100vh-80px)]">
+          <Card className="w-full max-w-2xl bg-white/95 backdrop-blur-sm shadow-2xl border-0">
+            <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg">
+              <CardTitle className="text-xl font-bold">{roomInfo.title}</CardTitle>
+              <p className="text-blue-100 text-sm">Created {new Date(roomInfo.createdAt).toLocaleDateString()}</p>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-8 p-8">
+              {/* Video Preview */}
+              <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl aspect-video overflow-hidden relative shadow-inner">
+                <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+                <div className="absolute bottom-6 left-0 right-0 flex justify-center gap-4">
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => manager.toggleAudio()}
+                    className="bg-white/20 backdrop-blur-sm hover:bg-white/30 border-white/20 text-white"
+                  >
+                    <Mic className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    onClick={() => manager.toggleVideo()}
+                    className="bg-white/20 backdrop-blur-sm hover:bg-white/30 border-white/20 text-white"
+                  >
+                    <VideoIcon className="h-5 w-5" />
+                  </Button>
+                </div>
+                <div className="absolute top-4 right-4 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+                  PREVIEW
+                </div>
+              </div>
 
-            {/* Form */}
-            <div className="space-y-4 flex flex-col justify-center">
-              <div>
-                <label className="text-sm font-medium">Display Name</label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Key className="h-3 w-3" /> Host Password (Optional)
-                </label>
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter room password"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Enter the room password to host the meeting. Password will be stored securely.
-                </p>
-              </div>
+              {/* Form */}
+              <div className="space-y-6 flex flex-col justify-center">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">Display Name</label>
+                  <Input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Your Name"
+                    className="h-12 text-lg"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                    <Key className="h-4 w-4 text-blue-600" /> Host Password (Optional)
+                  </label>
+                  <Input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter room password"
+                    className="h-12"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Enter the room password to host the meeting. Password will be stored securely.
+                  </p>
+                </div>
 
-              <div className="pt-4">
-                <Button className="w-full" size="lg" onClick={handleJoin}>
-                  {password ? 'Start Meeting as Host' : 'Ask to Join'}
-                </Button>
+                <div className="pt-2">
+                  <Button
+                    className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg"
+                    size="lg"
+                    onClick={handleJoin}
+                  >
+                    {password ? '🎥 Start Meeting as Host' : '👋 Ask to Join'}
+                  </Button>
+                </div>
+                
+                {!password && (
+                  <p className="text-xs text-center text-gray-500 bg-blue-50 p-3 rounded-lg">
+                    You will wait in the lobby until the host approves you.
+                  </p>
+                )}
               </div>
-              
-              {!password && (
-                <p className="text-xs text-center text-gray-500">
-                  You will wait in the lobby until the host approves you.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     )
   }
@@ -244,88 +293,152 @@ export default function RoomPage() {
   // LOBBY PHASE
   if (phase === 'lobby') {
     return (
-      <div className="min-h-screen bg-blue-50 flex flex-col items-center justify-center p-4 text-center">
-        <div className="bg-white p-8 rounded-full shadow-lg mb-6 animate-pulse">
-          <Users className="h-12 w-12 text-blue-500" />
-        </div>
-        <h2 className="text-2xl font-bold mb-2">Waiting for Host Approval</h2>
-        <p className="text-gray-600 mb-8 max-w-md">
-          You are in the lobby for <strong>{roomInfo.title}</strong>.
-          Please wait while the host lets you in.
-        </p>
-        
-        <div className="bg-white p-4 rounded-lg shadow-sm border max-w-sm w-full">
-          <div className="flex justify-between border-b pb-2 mb-2">
-            <span className="text-gray-500">Start Time</span>
-            <span>{new Date(roomInfo.createdAt).toLocaleTimeString()}</span>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        {/* Header */}
+        <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" onClick={handleGoHome} className="flex items-center gap-2 px-4 py-2">
+                  <Home className="w-4 h-4" />
+                  <span>Home</span>
+                </Button>
+                <div className="w-px h-6 bg-gray-300"></div>
+                <div>
+                  <h1 className="text-base font-normal text-gray-700">{roomInfo.title}</h1>
+                  <p className="text-gray-500 text-xs">Waiting in lobby</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between">
-             <span className="text-gray-500">Duration</span>
-             <span>{(Date.now() - roomInfo.createdAt) / 60000 | 0} mins</span>
-          </div>
         </div>
         
-        <Button variant="outline" className="mt-8" onClick={() => { manager.leave(); setPhase('setup'); }}>
-          Cancel
-        </Button>
+        {/* Main Content */}
+        <div className="flex flex-col items-center justify-center p-4 text-center min-h-[calc(100vh-80px)]">
+          <div className="bg-white/95 backdrop-blur-sm p-8 rounded-full shadow-2xl mb-6 animate-pulse border border-blue-100">
+            <Users className="h-12 w-12 text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Waiting for Host Approval</h2>
+          <p className="text-gray-600 mb-8 max-w-md">
+            You are in the lobby for <strong className="text-blue-600">{roomInfo.title}</strong>.
+            Please wait while the host lets you in.
+          </p>
+          
+          <Card className="bg-white/95 backdrop-blur-sm shadow-xl border-0 max-w-sm w-full mb-8">
+            <CardContent className="p-6">
+              <div className="flex justify-between items-center pb-3 mb-3 border-b border-blue-100">
+                <span className="text-gray-500 font-medium">Start Time</span>
+                <span className="text-gray-900 font-semibold">{new Date(roomInfo.createdAt).toLocaleTimeString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                 <span className="text-gray-500 font-medium">Duration</span>
+                 <span className="text-gray-900 font-semibold">{(Date.now() - roomInfo.createdAt) / 60000 | 0} mins</span>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Button
+            variant="outline"
+            onClick={() => { manager.leave(); setPhase('setup'); }}
+            className="bg-white/90 backdrop-blur-sm hover:bg-white transition-all duration-200 shadow-md border-gray-200 px-6 py-3"
+          >
+            Cancel
+          </Button>
+        </div>
       </div>
     )
   }
 
   // MEETING PHASE
   return (
-    <div className="h-screen bg-gray-900 flex flex-col">
+    <div className="h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex flex-col">
       {/* Header */}
-      <div className="bg-gray-800 p-4 flex justify-between items-center text-white">
-        <div className="flex items-center gap-2">
-          <span className="font-bold">{roomInfo.title}</span>
-          <span className="bg-gray-700 px-2 py-0.5 rounded text-xs">
-            {isHost ? 'Host' : 'Guest'}
-          </span>
+      <div className="bg-gray-800/90 backdrop-blur-sm p-3 flex justify-between items-center text-white shadow-xl">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            onClick={handleGoHome}
+            className="text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200 px-4 py-2"
+          >
+            <Home className="w-4 h-4 mr-2" />
+            <span>Leave</span>
+          </Button>
+          <div className="w-px h-6 bg-gray-600"></div>
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-lg">
+              <Users className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="font-normal text-base text-gray-200">{roomInfo.title}</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${isHost ? 'bg-blue-600 text-white' : 'bg-purple-600 text-white'}`}>
+                  {isHost ? '🎥 Host' : '👋 Guest'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="text-sm text-gray-400">
-          {isHost ? meetingState.participants.length : meetingState.participants.length + 1} Participants
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-sm text-gray-400">Participants</div>
+            <div className="text-lg font-normal text-gray-200">
+              {isHost ? meetingState.participants.length : meetingState.participants.length + 1}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto">
+      <div className="flex-1 p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto">
         {/* Local Video */}
-        <div className="relative bg-black rounded-lg overflow-hidden aspect-video border-2 border-blue-500">
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-video border-2 border-blue-500 shadow-2xl">
           <video
             ref={(ref) => { if(ref && manager.getLocalStream()) ref.srcObject = manager.getLocalStream() }}
             autoPlay muted playsInline
             className="w-full h-full object-cover"
           />
-          <div className="absolute bottom-2 left-2 text-white bg-black/50 px-2 rounded text-sm">
+          <div className="absolute bottom-4 left-4 text-white bg-black/70 backdrop-blur-sm px-3 py-2 rounded-lg text-sm font-medium">
             You ({name})
+          </div>
+          <div className="absolute top-4 left-4 bg-blue-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+            YOU
           </div>
         </div>
 
         {/* Remote Participants */}
         {meetingState.participants.filter(p => isHost ? p.role !== 'host' : p.id !== manager.getPeerId()).map(p => (
-          <ParticipantVideo key={p.id} participant={p} />
+          <div key={p.id} className="relative bg-black rounded-2xl overflow-hidden aspect-video shadow-2xl">
+            <ParticipantVideo key={p.id} participant={p} />
+          </div>
         ))}
       </div>
 
       {/* Host Controls: Lobby List */}
       {isHost && meetingState.waitingPeers.length > 0 && (
-        <div className="absolute top-16 right-4 w-72 bg-white rounded-lg shadow-xl overflow-hidden z-50">
-          <div className="bg-blue-600 text-white p-3 font-bold flex justify-between">
-            <span>Lobby ({meetingState.waitingPeers.length})</span>
+        <div className="absolute top-24 right-6 w-80 bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden z-50 border border-white/20">
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 font-bold flex justify-between items-center">
+            <span className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Lobby ({meetingState.waitingPeers.length})
+            </span>
           </div>
-          <div className="max-h-60 overflow-y-auto">
+          <div className="max-h-72 overflow-y-auto">
             {meetingState.waitingPeers.map(peer => (
-              <div key={peer.peerId} className="p-3 border-b flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-gray-500" />
-                  <span className="font-medium text-sm">{peer.name}</span>
+              <div key={peer.peerId} className="p-4 border-b border-gray-100 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-100 p-2 rounded-full">
+                    <User className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-900">{peer.name}</span>
+                    <div className="text-xs text-gray-500">Waiting to join</div>
+                  </div>
                 </div>
-                <div className="flex gap-1">
-                  <Button size="icon" variant="ghost" className="h-8 w-8 text-green-600" onClick={() => manager.approveParticipant(peer.peerId)}>
+                <div className="flex gap-2">
+                  <Button size="icon" className="h-9 w-9 bg-green-500 hover:bg-green-600 text-white rounded-lg" onClick={() => manager.approveParticipant(peer.peerId)}>
                     <Check className="h-4 w-4" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-8 w-8 text-red-600" onClick={() => manager.rejectParticipant(peer.peerId)}>
+                  <Button size="icon" className="h-9 w-9 bg-red-500 hover:bg-red-600 text-white rounded-lg" onClick={() => manager.rejectParticipant(peer.peerId)}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
@@ -336,15 +449,30 @@ export default function RoomPage() {
       )}
 
       {/* Footer Controls */}
-      <div className="bg-gray-800 p-4 flex justify-center gap-4">
-        <Button variant="secondary" size="icon" onClick={() => manager.toggleAudio()}>
-           <Mic className="h-5 w-5" />
+      <div className="bg-gray-800/90 backdrop-blur-sm p-6 flex justify-center gap-6 shadow-xl">
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => manager.toggleAudio()}
+          className="h-14 w-14 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full"
+        >
+           <Mic className="h-6 w-6" />
         </Button>
-        <Button variant="secondary" size="icon" onClick={() => manager.toggleVideo()}>
-           <VideoIcon className="h-5 w-5" />
+        <Button
+          variant="secondary"
+          size="icon"
+          onClick={() => manager.toggleVideo()}
+          className="h-14 w-14 bg-white/10 backdrop-blur-sm hover:bg-white/20 text-white border-white/20 rounded-full"
+        >
+           <VideoIcon className="h-6 w-6" />
         </Button>
-        <Button variant="destructive" size="icon" onClick={() => { manager.leave(); router.push('/'); }}>
-           <PhoneOff className="h-5 w-5" />
+        <Button
+          variant="destructive"
+          size="icon"
+          onClick={handleGoHome}
+          className="h-14 w-14 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg"
+        >
+           <PhoneOff className="h-6 w-6" />
         </Button>
       </div>
     </div>

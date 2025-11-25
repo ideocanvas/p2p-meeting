@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { meetingService } from '@/lib/meeting-service'
-import { JoinRoomRequest } from '@/lib/types'
 import { toast } from 'sonner'
+import { Home } from 'lucide-react'
 
 export default function JoinRoomPage({ params }: { params: Promise<{ lang: string }> }) {
   const [lang, setLang] = useState('en')
@@ -75,10 +75,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
       }
       
       // Then join the room
-      const response = await meetingService.joinRoom(formData.roomId, {
-        roomId: formData.roomId,
-        participantName: formData.participantName
-      })
+      const response = await meetingService.joinRoom(formData.roomId, formData.participantName, '')
 
       if (response.success) {
         toast.success('Room found! Redirecting to meeting...')
@@ -103,106 +100,113 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="max-w-md mx-auto">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold mb-2">Join Meeting Room</h1>
-          <p className="text-gray-600">Enter the room details to join the meeting</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" onClick={() => router.push(`/${lang}`)} className="flex items-center gap-2 px-4 py-2">
+                <Home className="w-4 h-4" />
+                <span>Home</span>
+              </Button>
+              <div className="w-px h-6 bg-gray-300"></div>
+              <div>
+                <h1 className="text-base font-normal text-gray-700">Join Meeting Room</h1>
+                <p className="text-gray-500 text-xs">Enter the room details to join the meeting</p>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
+      
+      {/* Main Content */}
+      <div className="container mx-auto py-8 px-4">
+        <div className="max-w-md mx-auto">
+          <Card>
+            <CardHeader>
+              <CardTitle>Room Information</CardTitle>
+              <CardDescription>
+                Provide the room ID and your name to join
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <label htmlFor="roomId" className="text-sm font-medium">Room ID *</label>
+                  <Input
+                    id="roomId"
+                    placeholder="Enter room ID (e.g., ABC123)"
+                    value={formData.roomId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('roomId', e.target.value.toUpperCase())}
+                    required
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Room ID is typically 6-12 characters long
+                  </p>
+                </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Room Information</CardTitle>
-            <CardDescription>
-              Provide the room ID and your name to join
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="space-y-2">
-                <label htmlFor="roomId" className="text-sm font-medium">Room ID *</label>
-                <Input
-                  id="roomId"
-                  placeholder="Enter room ID (e.g., ABC123)"
-                  value={formData.roomId}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('roomId', e.target.value.toUpperCase())}
-                  required
-                  className="font-mono"
-                />
-                <p className="text-xs text-gray-500">
-                  Room ID is typically 6-12 characters long
-                </p>
-              </div>
+                <div className="space-y-2">
+                  <label htmlFor="participantName" className="text-sm font-medium">Your Name *</label>
+                  <Input
+                    id="participantName"
+                    placeholder="Enter your name"
+                    value={formData.participantName}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('participantName', e.target.value)}
+                    required
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <label htmlFor="participantName" className="text-sm font-medium">Your Name *</label>
-                <Input
-                  id="participantName"
-                  placeholder="Enter your name"
-                  value={formData.participantName}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleInputChange('participantName', e.target.value)}
-                  required
-                />
-              </div>
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-blue-900 mb-2">Before You Join</h4>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Make sure you have a working camera and microphone</li>
+                    <li>• Use a modern browser (Chrome, Firefox, Safari, Edge)</li>
+                    <li>• Ensure you have a stable internet connection</li>
+                    <li>• Allow browser permissions for camera and microphone when prompted</li>
+                  </ul>
+                </div>
 
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-medium text-blue-900 mb-2">Before You Join</h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Make sure you have a working camera and microphone</li>
-                  <li>• Use a modern browser (Chrome, Firefox, Safari, Edge)</li>
-                  <li>• Ensure you have a stable internet connection</li>
-                  <li>• Allow browser permissions for camera and microphone when prompted</li>
-                </ul>
-              </div>
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    type="submit"
+                    disabled={isJoining}
+                    className="flex-1"
+                  >
+                    {isJoining ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                        Joining Room...
+                      </>
+                    ) : (
+                      'Join Room'
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.push(`/${lang}`)}
+                    disabled={isJoining}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
 
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h4 className="font-medium text-blue-900 mb-2">Before You Join</h4>
-                <ul className="text-sm text-blue-700 space-y-1">
-                  <li>• Make sure you have a working camera and microphone</li>
-                  <li>• Use a modern browser (Chrome, Firefox, Safari, Edge)</li>
-                  <li>• Ensure you have a stable internet connection</li>
-                  <li>• Allow browser permissions for camera and microphone when prompted</li>
-                </ul>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button
-                  type="submit"
-                  disabled={isJoining}
-                  className="flex-1"
-                >
-                  {isJoining ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                      Joining Room...
-                    </>
-                  ) : (
-                    'Join Room'
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push('/')}
-                  disabled={isJoining}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have a room ID?{' '}
-            <button
-              onClick={() => router.push('/create')}
-              className="text-blue-600 hover:text-blue-800 font-medium"
-            >
-              Create a new room
-            </button>
-          </p>
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Don't have a room ID?{' '}
+              <button
+                onClick={() => router.push(`/${lang}/create`)}
+                className="text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Create a new room
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>

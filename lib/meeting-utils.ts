@@ -1,8 +1,7 @@
-import { PersistentMeetingRoom, CreateRoomRequest, MeetingInstance } from './types'
+import { PersistentMeetingRoom, CreateRoomRequest } from './types'
 
 // In-memory storage for development (replace with KV in production)
 export const memoryStorage = new Map<string, PersistentMeetingRoom>();
-export const meetingInstancesStorage = new Map<string, MeetingInstance>();
 
 // Utility functions for persistent meeting room management
 export function isValidRoomId(id: string): boolean {
@@ -40,9 +39,7 @@ export function createRoomFromRequest(body: CreateRoomRequest, ownerId: string):
       enableChat: body.settings.enableChat !== false,
       enableScreenShare: body.settings.enableScreenShare !== false,
       autoRecord: body.settings.autoRecord || false,
-      defaultMeetingDuration: body.settings.defaultMeetingDuration || 60,
     },
-    recurringSchedule: body.recurringSchedule,
   };
 }
 
@@ -82,21 +79,6 @@ export function canJoinRoom(room: PersistentMeetingRoom): { canJoin: boolean; re
   // This would be enhanced with meeting instance checking in a real implementation
   
   return { canJoin: true }
-}
-
-export function generateMeetingId(): string {
-  return `meeting_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-export function createMeetingInstance(roomId: string, scheduledTime: string, maxParticipants: number): MeetingInstance {
-  return {
-    id: generateMeetingId(),
-    roomId,
-    scheduledTime,
-    status: 'scheduled',
-    currentParticipants: 0,
-    maxParticipants,
-  };
 }
 
 export function isRoomAvailable(roomId: string): boolean {

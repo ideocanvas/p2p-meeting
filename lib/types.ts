@@ -61,3 +61,68 @@ export interface ApiResponse<T = unknown> {
   error?: string
   message?: string
 }
+
+// Temporary types for meeting-utils (will be removed after cleanup)
+export interface PersistentMeetingRoom {
+  id: string
+  title: string
+  description: string
+  ownerId: string
+  createdAt: string
+  updatedAt: string
+  isActive: boolean
+  settings: {
+    maxParticipants: number
+    requirePassword: boolean
+    allowWaitingRoom: boolean
+    muteOnEntry: boolean
+    videoOnEntry: boolean
+    enableChat: boolean
+    enableScreenShare: boolean
+    autoRecord: boolean
+  }
+}
+
+// API Response types
+export interface CreateRoomResponse {
+  success: boolean
+  roomId?: string
+  error?: string
+}
+
+export interface GetRoomRequest {
+  roomId: string
+  password?: string
+}
+
+export interface GetRoomResponse {
+  success: boolean
+  room?: SimplifiedRoom
+  error?: string
+}
+
+export interface SimplifiedRoom {
+  id: string
+  title: string
+  status: 'waiting' | 'active' | 'ended'
+  expiresAt: string
+  participantCount: number
+  hostConnected: boolean
+}
+
+export interface CreateRoomRequest {
+  roomId: string
+  title: string
+  description: string
+  password: string
+  settings: {
+    maxParticipants?: number
+    requirePassword?: boolean
+    allowWaitingRoom?: boolean
+    muteOnEntry?: boolean
+    videoOnEntry?: boolean
+    enableChat?: boolean
+    enableScreenShare?: boolean
+    autoRecord?: boolean
+  }
+}
