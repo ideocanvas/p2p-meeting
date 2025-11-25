@@ -2,23 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { meetingService } from '@/lib/meeting-service'
 import { LocalRoomData } from '@/lib/types'
 import { toast } from 'sonner'
-import {
-  Plus,
-  Users,
-  Video,
-  Copy,
-  Share2,
-  Clock,
-  Trash2,
-  Key,
-  Settings,
-  Home
-} from 'lucide-react'
+import { SiteHeader } from '@/components/site-header'
+import { Plus, Users, Video, Copy, Share2, Clock, Trash2, Calendar, ArrowRight } from 'lucide-react'
 import { secureStorage } from '@/lib/secure-storage'
 
 export default function DashboardPage({ params }: { params: Promise<{ lang: string }> }) {
@@ -42,7 +31,6 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
   const loadRooms = async () => {
     try {
       setIsLoading(true)
-      // Load rooms from secure storage
       const storedRooms = await secureStorage.getRooms()
       setRooms(storedRooms)
     } catch (error) {
@@ -53,227 +41,120 @@ export default function DashboardPage({ params }: { params: Promise<{ lang: stri
     }
   }
 
-  const handleCreateRoom = () => {
-    router.push(`/${lang}/create`)
-  }
-
-  const handleJoinRoom = (roomId: string) => {
-    router.push(`/${lang}/room/${roomId}`)
-  }
-
   const handleCopyLink = async (roomId: string) => {
-    const roomLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/${lang}/room/${roomId}`
+    const roomLink = `${window.location.origin}/${lang}/room/${roomId}`
     try {
       await navigator.clipboard.writeText(roomLink)
-      toast.success('Room link copied to clipboard')
+      toast.success('Link copied')
     } catch (err) {
-      toast.error('Failed to copy link')
-    }
-  }
-
-  const handleShareRoom = (roomId: string) => {
-    const roomLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/${lang}/room/${roomId}`
-    if (navigator.share) {
-      navigator.share({
-        title: 'Join my meeting room',
-        text: 'Click the link to join the meeting',
-        url: roomLink,
-      })
-    } else {
-      handleCopyLink(roomId)
+      toast.error('Failed to copy')
     }
   }
 
   const handleDeleteRoom = async (roomId: string) => {
-    if (typeof window !== 'undefined' && !window.confirm('Are you sure you want to delete this room? This action cannot be undone.')) {
-      return
-    }
-
+    if (!window.confirm('Delete this room?')) return
     try {
-      // Remove from secure storage
       await secureStorage.removeRoom(roomId)
       setRooms(rooms.filter(room => room.roomId !== roomId))
-      toast.success('Room deleted successfully')
+      toast.success('Room deleted')
     } catch (error) {
-      console.error('Error deleting room:', error)
-      toast.error('Failed to delete room')
+      toast.error('Failed to delete')
     }
-  }
-
-  const handleGoHome = () => {
-    router.push(`/${lang}`)
-  }
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your rooms...</p>
-        </div>
-      </div>
-    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button variant="ghost" onClick={handleGoHome} className="flex items-center gap-2 px-4 py-2">
-                <Home className="w-4 h-4" />
-                <span>Home</span>
-              </Button>
-              <div className="w-px h-6 bg-gray-300"></div>
-              <div>
-                <h1 className="text-base font-normal text-gray-700">Meeting Rooms</h1>
-                <p className="text-gray-500 text-xs">Manage your persistent meeting rooms</p>
-              </div>
-            </div>
-            <Button onClick={handleCreateRoom} className="flex items-center gap-2">
-              <Plus className="w-4 h-4" />
-              Create New Room
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50/50">
+      <SiteHeader lang={lang} />
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {rooms.length === 0 ? (
-          // Empty State
-          <div className="text-center py-16">
-            <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Video className="w-12 h-12 text-blue-600" />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
+            <p className="text-gray-500 mt-2">Manage your persistent meeting rooms</p>
+          </div>
+          <Button onClick={() => router.push(`/${lang}/create`)} size="lg" className="bg-blue-600 hover:bg-blue-700 shadow-md">
+            <Plus className="w-5 h-5 mr-2" />
+            Create New Room
+          </Button>
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-48 bg-gray-200 rounded-xl animate-pulse" />
+            ))}
+          </div>
+        ) : rooms.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm">
+            <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Calendar className="w-10 h-10 text-blue-500" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">No rooms yet</h2>
-            <p className="text-gray-600 mb-8 max-w-md mx-auto">
-              Create your first persistent meeting room to get started. Persistent rooms have fixed, reusable links that you can share with participants anytime.
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">No rooms yet</h2>
+            <p className="text-gray-500 mb-8 max-w-md mx-auto">
+              Create your first room to get started. Share the link once, use it forever.
             </p>
-            <Button onClick={handleCreateRoom} size="lg" className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Create Your First Room
+            <Button onClick={() => router.push(`/${lang}/create`)} variant="outline" className="border-2">
+              Create Room
             </Button>
           </div>
         ) : (
-          // Rooms Grid
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {rooms.map((room) => (
-              <Card key={room.roomId} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <CardTitle className="text-lg truncate">{room.title}</CardTitle>
-                      <CardDescription className="line-clamp-2 mt-1">
-                        Created {new Date(room.createdAt).toLocaleDateString()}
-                      </CardDescription>
+              <Card key={room.roomId} className="group hover:shadow-xl transition-all duration-300 border-gray-200/60 overflow-hidden bg-white">
+                <CardContent className="p-0">
+                  <div className="p-6 border-b border-gray-100">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="p-3 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors">
+                        <Video className="w-6 h-6 text-indigo-600" />
+                      </div>
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" onClick={() => handleCopyLink(room.roomId)} title="Copy Link">
+                          <Copy className="w-4 h-4 text-gray-500" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteRoom(room.roomId)} title="Delete Room">
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopyLink(room.roomId)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleShareRoom(room.roomId)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteRoom(room.roomId)}
-                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    
+                    <h3 className="text-xl font-bold text-gray-900 mb-1 truncate pr-4">{room.title}</h3>
+                    <div className="flex items-center text-sm text-gray-500 gap-2">
+                      <Clock className="w-3 h-3" />
+                      <span>Last used {new Date(room.lastAccessed).toLocaleDateString()}</span>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Room Stats */}
-                  <div className="flex items-center justify-between text-sm text-gray-600">
-                    <div className="flex items-center gap-1">
-                      <Video className="w-4 h-4" />
-                      <span>Meeting Room</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-4 h-4" />
-                      <span>Last accessed {new Date(room.lastAccessed).toLocaleDateString()}</span>
-                    </div>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => handleJoinRoom(room.roomId)}
-                      className="flex-1 flex items-center gap-2"
+                  
+                  <div className="p-4 bg-gray-50/50 flex gap-3">
+                    <Button 
+                      className="w-full bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm"
+                      onClick={() => router.push(`/${lang}/room/${room.roomId}`)}
                     >
-                      <Video className="w-4 h-4" />
-                      Join Now
+                      Join Room <ArrowRight className="w-4 h-4 ml-2" />
                     </Button>
-                  </div>
-
-                  {/* Quick Actions */}
-                  <div className="flex justify-between text-xs text-gray-500">
-                    <button
-                      onClick={() => handleCopyLink(room.roomId)}
-                      className="hover:text-gray-700"
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="bg-white"
+                      onClick={() => {
+                         if (navigator.share) {
+                            navigator.share({
+                              title: room.title,
+                              url: `${window.location.origin}/${lang}/room/${room.roomId}`
+                            })
+                         } else {
+                            handleCopyLink(room.roomId)
+                         }
+                      }}
                     >
-                      Copy Link
-                    </button>
-                    <button className="hover:text-gray-700">
-                      View History
-                    </button>
+                      <Share2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
-
-        {/* Quick Stats */}
-        {rooms.length > 0 && (
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
-                    <Video className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900">{rooms.length}</p>
-                    <p className="text-sm text-gray-600">Active Rooms</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4">
-                    <Users className="w-6 h-6 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {rooms.length}
-                    </p>
-                    <p className="text-sm text-gray-600">Total Capacity</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </div>
+      </main>
     </div>
   )
 }

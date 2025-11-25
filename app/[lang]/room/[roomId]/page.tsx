@@ -10,6 +10,7 @@ import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Check, X, Users, L
 import { toast } from 'sonner'
 import { PublicRoomInfo, Participant } from '@/lib/types'
 import { secureStorage } from '@/lib/secure-storage'
+import { SiteHeader } from '@/components/site-header'
 
 // ParticipantVideo component with proper cleanup
 function ParticipantVideo({ participant }: { participant: Participant }) {
@@ -185,30 +186,13 @@ export default function RoomPage() {
   // SETUP PHASE
   if (phase === 'setup') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        {/* Header */}
-        <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" onClick={handleGoHome} className="flex items-center gap-2 px-4 py-2">
-                  <Home className="w-4 h-4" />
-                  <span>Home</span>
-                </Button>
-                <div className="w-px h-6 bg-gray-300"></div>
-                <div>
-                  <h1 className="text-base font-normal text-gray-700">{roomInfo.title}</h1>
-                  <p className="text-gray-500 text-xs">Join meeting room</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <SiteHeader lang={lang} />
         
         {/* Main Content */}
         <div className="flex flex-col items-center justify-center p-4 min-h-[calc(100vh-80px)]">
-          <Card className="w-full max-w-2xl bg-white/95 backdrop-blur-sm shadow-2xl border-0">
-            <CardHeader className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-t-lg">
+          <Card className="w-full max-w-2xl bg-white/80 backdrop-blur-xl shadow-2xl border-0">
+            <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
               <CardTitle className="text-xl font-bold">{roomInfo.title}</CardTitle>
               <p className="text-blue-100 text-sm">Created {new Date(roomInfo.createdAt).toLocaleDateString()}</p>
             </CardHeader>
@@ -293,38 +277,21 @@ export default function RoomPage() {
   // LOBBY PHASE
   if (phase === 'lobby') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        {/* Header */}
-        <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" onClick={handleGoHome} className="flex items-center gap-2 px-4 py-2">
-                  <Home className="w-4 h-4" />
-                  <span>Home</span>
-                </Button>
-                <div className="w-px h-6 bg-gray-300"></div>
-                <div>
-                  <h1 className="text-base font-normal text-gray-700">{roomInfo.title}</h1>
-                  <p className="text-gray-500 text-xs">Waiting in lobby</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <SiteHeader lang={lang} />
         
         {/* Main Content */}
         <div className="flex flex-col items-center justify-center p-4 text-center min-h-[calc(100vh-80px)]">
-          <div className="bg-white/95 backdrop-blur-sm p-8 rounded-full shadow-2xl mb-6 animate-pulse border border-blue-100">
-            <Users className="h-12 w-12 text-blue-600" />
+          <div className="bg-white/80 backdrop-blur-xl p-8 rounded-full shadow-2xl mb-6 animate-pulse border border-indigo-100">
+            <Users className="h-12 w-12 text-indigo-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Waiting for Host Approval</h2>
+          <h2 className="text-2xl font-bold mb-3 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">Waiting for Host Approval</h2>
           <p className="text-gray-600 mb-8 max-w-md">
-            You are in the lobby for <strong className="text-blue-600">{roomInfo.title}</strong>.
+            You are in the lobby for <strong className="text-indigo-600">{roomInfo.title}</strong>.
             Please wait while the host lets you in.
           </p>
           
-          <Card className="bg-white/95 backdrop-blur-sm shadow-xl border-0 max-w-sm w-full mb-8">
+          <Card className="bg-white/80 backdrop-blur-xl shadow-xl border-0 max-w-sm w-full mb-8">
             <CardContent className="p-6">
               <div className="flex justify-between items-center pb-3 mb-3 border-b border-blue-100">
                 <span className="text-gray-500 font-medium">Start Time</span>
