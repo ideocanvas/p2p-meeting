@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { roomService } from '@/services/room-service'
 
-export const runtime = 'edge'
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
