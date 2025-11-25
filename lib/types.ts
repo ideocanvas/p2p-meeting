@@ -44,7 +44,18 @@ export interface Participant {
   status: 'connecting' | 'waiting' | 'connected' | 'disconnected'
   hasVideo: boolean
   hasAudio: boolean
+  isScreenSharing?: boolean // Added for screen share status
   stream?: MediaStream
+}
+
+// Added Chat Message Type
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: number;
+  isSystem?: boolean; // For "User joined/left" messages
 }
 
 export interface LogEntry {
