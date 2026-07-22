@@ -8,7 +8,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -59,7 +60,6 @@
     "tailwind-merge": "2.5.2"
   },
   "browserslist": [
-    "ie >= 11",
     "> 0.5%",
     "last 2 versions",
     "not dead"

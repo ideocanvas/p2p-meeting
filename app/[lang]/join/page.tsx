@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { meetingService } from '@/lib/meeting-service'
 import { toast } from 'sonner'
 import { LogIn, Loader2, User } from 'lucide-react'
 import { SiteHeader } from '@/components/site-header'
@@ -35,8 +34,9 @@ export default function JoinRoomPage({ params }: { params: Promise<{ lang: strin
     
     setIsJoining(true)
     try {
-      const roomCheck = await meetingService.getRoom({ roomId })
-      if (!roomCheck.success) throw new Error('Room not found')
+      const res = await fetch(`/api/rooms/${roomId}`)
+      const data = await res.json()
+      if (!data.success) throw new Error('Room not found')
       
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem('user_name', name) // Simple cache

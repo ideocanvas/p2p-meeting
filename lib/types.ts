@@ -5,7 +5,7 @@ export type ConnectionState = 'waiting' | 'connecting' | 'verifying' | 'connecte
 export interface RoomData {
   id: string
   title: string
-  masterPassword: string // Plain text master password (for simplicity)
+  passwordHash: string // PBKDF2 hash of the host master password
   hostPeerId: string | null
   createdAt: number
   participants: {
@@ -44,72 +44,17 @@ export interface Participant {
   status: 'connecting' | 'waiting' | 'connected' | 'disconnected'
   hasVideo: boolean
   hasAudio: boolean
-  isScreenSharing?: boolean // Added for screen share status
+  isScreenSharing?: boolean
   stream?: MediaStream
 }
 
-// Added Chat Message Type
 export interface ChatMessage {
   id: string;
   senderId: string;
   senderName: string;
   text: string;
   timestamp: number;
-  isSystem?: boolean; // For "User joined/left" messages
-}
-
-export interface LogEntry {
-  timestamp: Date
-  level: "info" | "success" | "warning" | "error"
-  message: string
-  details?: string
-}
-
-// API Response wrapper
-export interface ApiResponse<T = unknown> {
-  success: boolean
-  data?: T
-  error?: string
-  message?: string
-}
-
-// Temporary types for meeting-utils (will be removed after cleanup)
-export interface PersistentMeetingRoom {
-  id: string
-  title: string
-  description: string
-  ownerId: string
-  createdAt: string
-  updatedAt: string
-  isActive: boolean
-  settings: {
-    maxParticipants: number
-    requirePassword: boolean
-    allowWaitingRoom: boolean
-    muteOnEntry: boolean
-    videoOnEntry: boolean
-    enableChat: boolean
-    enableScreenShare: boolean
-    autoRecord: boolean
-  }
-}
-
-// API Response types
-export interface CreateRoomResponse {
-  success: boolean
-  roomId?: string
-  error?: string
-}
-
-export interface GetRoomRequest {
-  roomId: string
-  password?: string
-}
-
-export interface GetRoomResponse {
-  success: boolean
-  room?: SimplifiedRoom
-  error?: string
+  isSystem?: boolean;
 }
 
 export interface SimplifiedRoom {
@@ -119,21 +64,4 @@ export interface SimplifiedRoom {
   expiresAt: string
   participantCount: number
   hostConnected: boolean
-}
-
-export interface CreateRoomRequest {
-  roomId: string
-  title: string
-  description: string
-  password: string
-  settings: {
-    maxParticipants?: number
-    requirePassword?: boolean
-    allowWaitingRoom?: boolean
-    muteOnEntry?: boolean
-    videoOnEntry?: boolean
-    enableChat?: boolean
-    enableScreenShare?: boolean
-    autoRecord?: boolean
-  }
 }

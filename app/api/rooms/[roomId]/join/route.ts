@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { roomService } from '@/services/room-service'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 interface JoinRoomRequest {
   participantName: string;
@@ -16,9 +17,20 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
 ): Promise<NextResponse<JoinRoomResponse>> {
+  const { roomId } = await params
+
+  // Rate limit join attempts per IP + room.
+  const ip = getClientIp(request)
+  const limit = await checkRateLimit(`join:${ip}:${roomId}`, 30, 600)
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { success: false, error: 'Too many join attempts. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } }
+    )
+  }
+
   try {
-    const { roomId } = await params;
-    const body = await request.json() as JoinRoomRequest;
+    const body = await request.json() as JoinRoomRequest
 
     // Validate request
     if (!body.participantName || body.participantName.trim().length < 2) {

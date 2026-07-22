@@ -132,16 +132,6 @@ export default function RoomPage() {
       if (storedName) {
         setName(storedName)
       }
-
-      // Check if we have a stored password for this room
-      const hasAccess = await secureStorage.hasRoomAccess(roomId)
-      if (hasAccess) {
-        // Auto-fill with stored password
-        const storedPassword = await secureStorage.getPassword(roomId)
-        if (storedPassword) {
-          setPassword(storedPassword)
-        }
-      }
     }
     fetchRoom()
     
@@ -183,12 +173,14 @@ export default function RoomPage() {
 
     // Try to verify as Host using password
     if (password) {
-      // Try master password
-      const res = await fetch(`/api/rooms/${roomId}?password=${password}`)
+      // Verify host password via POST (never in the URL query string)
+      const res = await fetch(`/api/rooms/${roomId}/verify-host`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      })
       const data = await res.json()
-      if (data.isHost) {
-        // Store password securely for future use
-        await secureStorage.storePassword(roomId, password)
+      if (data.success && data.isHost) {
         await secureStorage.saveRoom({
           roomId,
           title: roomInfo?.title || '',
@@ -199,6 +191,9 @@ export default function RoomPage() {
         setIsHost(true)
         setPhase('meeting')
         manager.startHosting(roomId, password, name, false)
+        return
+      } else if (res.status === 429) {
+        toast.error(t("room.incorrectPassword"))
         return
       } else {
         toast.error(t("room.incorrectPassword"))

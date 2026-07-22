@@ -35,14 +35,13 @@ export default function CreateRoomPage({ params }: { params: Promise<{ lang: str
       const data = await res.json()
       
       if (data.success) {
-        if (typeof window !== 'undefined' && password) {
+        if (typeof window !== 'undefined') {
           await secureStorage.saveRoom({
             roomId: data.roomId,
             title,
             createdAt: Date.now(),
             lastAccessed: Date.now()
           })
-          await secureStorage.storePassword(data.roomId, password)
         }
         router.push(`/${lang}/room/${data.roomId}`)
       } else {

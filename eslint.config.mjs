@@ -7,7 +7,7 @@ const eslintConfig = [
   js.configs.recommended,
   {
     // Browser environment for frontend files
-    files: ["app/**/*.{js,jsx,ts,tsx}", "components/**/*.{js,jsx,ts,tsx}", "hooks/**/*.{js,jsx,ts,tsx}", "lib/**/*.{js,jsx,ts,tsx}"],
+    files: ["app/**/*.{js,jsx,ts,tsx}", "components/**/*.{js,jsx,ts,tsx}", "lib/**/*.{js,jsx,ts,tsx}", "services/**/*.{js,jsx,ts,tsx}"],
     languageOptions: {
       parser: typescriptParser,
       globals: {
@@ -65,6 +65,12 @@ const eslintConfig = [
         btoa: "readonly",
         TextEncoder: "readonly",
         TextDecoder: "readonly",
+        // Web platform globals (available in browsers, Workers, and Node 20+)
+        crypto: "readonly",
+        Request: "readonly",
+        Response: "readonly",
+        Headers: "readonly",
+        HeadersInit: "readonly",
         // Node.js types
         NodeJS: "readonly",
       },

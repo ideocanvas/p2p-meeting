@@ -22,10 +22,10 @@ export class KVHelper {
   private static instance: KVHelper;
   private kv: KVNamespace | null = null;
   private useMemoryFallback = false;
+  private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
-  private constructor() {
-    this.initializeKV();
-  }
+  private constructor() {}
 
   static getInstance(): KVHelper {
     if (!this.instance) {
@@ -34,10 +34,24 @@ export class KVHelper {
     return this.instance;
   }
 
-  private initializeKV() {
+  // Lazily and asynchronously resolve the Cloudflare KV binding.
+  // Using the async context form avoids throwing / silently falling back to an
+  // ephemeral in-memory Map on Workers, which would cause rooms to vanish
+  // across requests/isolates.
+  private ensureInitialized(): Promise<void> {
+    if (this.initialized) return Promise.resolve();
+    if (!this.initPromise) {
+      this.initPromise = this.initializeKV().finally(() => {
+        this.initialized = true;
+      });
+    }
+    return this.initPromise;
+  }
+
+  private async initializeKV() {
     try {
-      const { env } = getCloudflareContext();
-      
+      const { env } = await getCloudflareContext({ async: true });
+
       // @ts-expect-error - Cloudflare KV binding
       this.kv = env.MEETING_ROOMS as KVNamespace;
 
@@ -60,6 +74,8 @@ export class KVHelper {
   }
 
   async get(key: string): Promise<string | null> {
+    await this.ensureInitialized();
+
     if (this.useMemoryFallback) {
       return globalThis.memoryStore?.get(key) || null;
     }
@@ -78,6 +94,8 @@ export class KVHelper {
   }
 
   async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
+    await this.ensureInitialized();
+
     if (this.useMemoryFallback) {
       globalThis.memoryStore?.set(key, value);
       return;
@@ -98,6 +116,8 @@ export class KVHelper {
   }
 
   async delete(key: string): Promise<void> {
+    await this.ensureInitialized();
+
     if (this.useMemoryFallback) {
       globalThis.memoryStore?.delete(key);
       return;

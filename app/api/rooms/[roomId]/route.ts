@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { roomService } from '@/services/room-service'
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   const { roomId } = await params
@@ -12,16 +12,12 @@ export async function GET(
     return NextResponse.json({ success: false, error: 'Room not found' }, { status: 404 })
   }
 
-  // Check password if provided in query for Host verification
-  const { searchParams } = new URL(request.url)
-  const password = searchParams.get('password')
-  const isHost = password === room.masterPassword
-
+  // Public room info only. Host verification happens via the dedicated
+  // POST /verify-host endpoint so the password never travels in the URL.
   return NextResponse.json({
     success: true,
     room: roomService.sanitize(room),
-    isHost,
-    hostPeerId: room.hostPeerId // Needed for participants to connect to host
+    hostPeerId: room.hostPeerId // Needed for participants to dial the host
   })
 }
 

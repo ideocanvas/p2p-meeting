@@ -2,11 +2,7 @@
 
 import Peer, { DataConnection, MediaConnection } from "peerjs";
 import { Participant, ConnectionState, ChatMessage } from "@/lib/types";
-
-const ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:global.stun.twilio.com:3478" }
-];
+import { ICE_SERVERS } from "@/lib/connection-strategies";
 
 type Message =
   | { type: 'join-request'; name: string }

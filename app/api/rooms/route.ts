@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { roomService } from '@/services/room-service'
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
+  // Rate limit room creation per IP to blunt abuse.
+  const ip = getClientIp(request)
+  const limit = await checkRateLimit(`create:${ip}`, 10, 600)
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { success: false, error: 'Too many rooms created. Please try again later.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } }
+    )
+  }
+
   try {
     const body = await request.json()
     const { title, password } = body

@@ -1,13 +1,17 @@
 import { RoomData, PublicRoomInfo, SimplifiedRoom } from '@/lib/types'
 import { KVHelper } from '@/lib/kv-helper'
+import { hashPassword, verifyPassword } from '@/lib/password'
+import { generateRoomId, generateOpaqueId } from '@/lib/crypto-utils'
+
+const ROOM_TTL = 24 * 60 * 60 // 24h expiry in seconds
 
 export const roomService = {
   async createRoom(title: string, masterPassword: string): Promise<RoomData> {
-    const id = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const id = generateRoomId()
     const room: RoomData = {
       id,
       title,
-      masterPassword,
+      passwordHash: await hashPassword(masterPassword),
       hostPeerId: null,
       createdAt: Date.now(),
       participants: [],
@@ -16,12 +20,12 @@ export const roomService = {
 
     try {
       const kvHelper = KVHelper.getInstance();
-      await kvHelper.put(`room:${id}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 }) // 24h expiry
+      await kvHelper.put(`room:${id}`, JSON.stringify(room), { expirationTtl: ROOM_TTL })
     } catch (error) {
       console.error('Failed to save room to KV:', error)
       throw new Error('Failed to create room')
     }
-    
+
     return room
   },
 
@@ -38,7 +42,8 @@ export const roomService = {
 
   async verifyMasterPassword(id: string, password: string): Promise<boolean> {
     const room = await this.getRoom(id)
-    return room ? room.masterPassword === password : false
+    if (!room) return false
+    return verifyPassword(password, room.passwordHash)
   },
 
   async isAuthorized(id: string, authData: { password?: string }): Promise<boolean> {
@@ -54,7 +59,7 @@ export const roomService = {
       room.hostPeerId = peerId
       try {
         const kvHelper = KVHelper.getInstance();
-        await kvHelper.put(`room:${id}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 })
+        await kvHelper.put(`room:${id}`, JSON.stringify(room), { expirationTtl: ROOM_TTL })
       } catch (error) {
         console.error('Failed to update room in KV:', error)
         throw new Error('Failed to update room')
@@ -75,7 +80,7 @@ export const roomService = {
     }
 
     // Add participant to waiting list
-    const participantId = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const participantId = generateOpaqueId(8)
     const participant = {
       id: participantId,
       name: participantName,
@@ -88,7 +93,7 @@ export const roomService = {
 
     try {
       const kvHelper = KVHelper.getInstance();
-      await kvHelper.put(`room:${roomId}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 })
+      await kvHelper.put(`room:${roomId}`, JSON.stringify(room), { expirationTtl: ROOM_TTL })
       return { success: true, participantId }
     } catch (error) {
       console.error('Failed to join room:', error)
@@ -112,7 +117,7 @@ export const roomService = {
 
     try {
       const kvHelper = KVHelper.getInstance();
-      await kvHelper.put(`room:${roomId}`, JSON.stringify(room), { expirationTtl: 24 * 60 * 60 })
+      await kvHelper.put(`room:${roomId}`, JSON.stringify(room), { expirationTtl: ROOM_TTL })
       return { success: true }
     } catch (error) {
       console.error('Failed to approve participant:', error)
@@ -126,7 +131,7 @@ export const roomService = {
       return { success: false, error: 'Room not found' }
     }
 
-    if (!this.verifyMasterPassword(roomId, password)) {
+    if (!await this.verifyMasterPassword(roomId, password)) {
       return { success: false, error: 'Invalid password' }
     }
 
@@ -147,14 +152,14 @@ export const roomService = {
       return { success: false, error: 'Room not found' }
     }
 
-    if (!this.verifyMasterPassword(roomId, password)) {
+    if (!await this.verifyMasterPassword(roomId, password)) {
       return { success: false, error: 'Invalid password' }
     }
 
     try {
       // Update host peer ID
       await this.updateHostPeerId(roomId, hostPeerId)
-      
+
       const simplifiedRoom: SimplifiedRoom = {
         id: room.id,
         title: room.title,
@@ -163,7 +168,7 @@ export const roomService = {
         participantCount: room.participants.filter(p => p.status === 'active').length,
         hostConnected: !!hostPeerId
       }
-      
+
       return { success: true, room: simplifiedRoom }
     } catch (error) {
       console.error('Failed to reconnect host:', error)
