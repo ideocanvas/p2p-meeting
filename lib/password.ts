@@ -3,7 +3,9 @@ import 'server-only'
 // PBKDF2 password hashing using the Web Crypto API (available in Cloudflare
 // Workers and Node 20+). Stored format: pbkdf2$<iterations>$<saltB64>$<hashB64>
 
-const ITERATIONS = 120000
+// Cloudflare Workers caps PBKDF2 iterations at 100000, so we stay at the max
+// allowed value. (Web Crypto: SHA-256, 16-byte salt, 32-byte hash.)
+const ITERATIONS = 100000
 const SALT_LENGTH = 16 // bytes
 const HASH_LENGTH = 32 // bytes
 const ALGORITHM = 'SHA-256'
