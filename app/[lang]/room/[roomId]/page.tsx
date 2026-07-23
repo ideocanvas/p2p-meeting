@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff,
-  Check, X, Users, Key, QrCode, Copy, Share2, MessageSquare, Send, Monitor, MonitorOff
+  Check, X, Users, Key, QrCode, Copy, Share2, MessageSquare, Send, Monitor, MonitorOff,
+  LayoutGrid, Maximize2, Minimize2
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PublicRoomInfo, Participant, ChatMessage } from '@/lib/types'
@@ -18,16 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { VideoPlayer } from '@/components/video-player'
 import { getTranslations } from '@/lib/client-i18n'
 
-const getInitials = (name: string) => {
-  return (name || 'User')
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase();
-}
-
-// 1. Participant Tile Component (Updated)
+// Participant tile for the grid view
 function ParticipantVideo({ participant }: { participant: Participant }) {
   return (
     <VideoPlayer
@@ -37,7 +29,7 @@ function ParticipantVideo({ participant }: { participant: Participant }) {
       className={`${participant.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2' : 'aspect-video'}`}
       isScreenSharing={participant.isScreenSharing}
       hasAudio={participant.hasAudio}
-      isVideoEnabled={participant.hasVideo} // Pass the status here
+      isVideoEnabled={participant.hasVideo}
     />
   )
 }
@@ -63,7 +55,12 @@ export default function RoomPage() {
   const [showQR, setShowQR] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [chatInput, setChatInput] = useState('')
-  
+
+  // Layout state for the meeting view
+  const [viewMode, setViewMode] = useState<'auto' | 'grid' | 'spotlight'>('auto')
+  const [showFilmstrip, setShowFilmstrip] = useState(true)
+  const [fitMode, setFitMode] = useState<'cover' | 'contain'>('cover')
+
   // Meeting State
   const manager = MeetingManager.getInstance()
   const [meetingState, setMeetingState] = useState(manager.state)
@@ -359,6 +356,25 @@ export default function RoomPage() {
     )
   }
 
+  // --- Spotlight / screen-share derived state ---
+  const localName = name || t("room.you")
+  const displayedParticipants = meetingState.participants.filter(
+    p => (isHost ? p.role !== 'host' : p.id !== manager.getPeerId())
+  )
+  const sharingParticipant = displayedParticipants.find(p => p.isScreenSharing) || null
+  const localSharing = meetingState.isScreenSharing
+  const hasShare = localSharing || !!sharingParticipant
+  const isSpotlight = hasShare && viewMode !== 'grid'
+
+  // Spotlight source: a remote sharer takes priority, otherwise the local share.
+  const spotlightIsLocal = !sharingParticipant
+  const spotlightStream = sharingParticipant ? (sharingParticipant.stream || null) : manager.getLocalStream()
+  const spotlightName = sharingParticipant ? sharingParticipant.name : localName
+
+  // Filmstrip tiles: everyone except the spotlighted sharer.
+  const filmstripRemote = displayedParticipants.filter(p => p !== sharingParticipant)
+  const showLocalInFilmstrip = !localSharing
+
   // MEETING PHASE
   return (
     <div className="fixed inset-0 bg-black flex flex-col touch-none">
@@ -408,38 +424,118 @@ export default function RoomPage() {
         </div>
       </div>
 
-      {/* 2. Main Layout (Video Grid + Chat) */}
+      {/* 2. Main Layout (Video Area + Chat) */}
       <div className="flex-1 flex overflow-hidden mt-16 mb-20 relative">
-          {/* Video Grid */}
-          <div className={`flex-1 overflow-y-auto p-2 sm:p-4 transition-all duration-300 ${showChat ? 'mr-0 sm:mr-80' : ''}`}>
-             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 auto-rows-fr max-w-7xl mx-auto min-h-full content-start">
-                
-                {/* Local User */}
+          {isSpotlight ? (
+            /* --- Spotlight / screen-share focus --- */
+            <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${showChat ? 'mr-0 sm:mr-80' : ''}`}>
+              <div className="relative flex-1 min-h-0 flex items-center justify-center p-2 sm:p-4">
+                {/* Floating controls */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-2 pointer-events-auto">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-medium hover:bg-black/80 transition-colors border border-white/10"
+                    title={t("room.gridView")}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" /> {t("room.gridView")}
+                  </button>
+                  <button
+                    onClick={() => setFitMode(fitMode === 'cover' ? 'contain' : 'cover')}
+                    className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-medium hover:bg-black/80 transition-colors border border-white/10"
+                    title={fitMode === 'cover' ? t("room.fill") : t("room.fit")}
+                  >
+                    {fitMode === 'cover' ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+                    {fitMode === 'cover' ? t("room.fill") : t("room.fit")}
+                  </button>
+                  <button
+                    onClick={() => setShowFilmstrip(!showFilmstrip)}
+                    className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-medium hover:bg-black/80 transition-colors border border-white/10"
+                    title={showFilmstrip ? t("room.hideParticipants") : t("room.showParticipants")}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    {showFilmstrip ? t("room.hideParticipants") : t("room.showParticipants")}
+                  </button>
+                </div>
+
                 <VideoPlayer
-                  stream={manager.getLocalStream()}
-                  isLocal={true}
-                  name={t("room.you")}
-                  className={`${meetingState.isScreenSharing ? 'col-span-1 sm:col-span-2 row-span-2 aspect-auto' : 'aspect-video'}`}
-                  isScreenSharing={meetingState.isScreenSharing}
-                  isVideoEnabled={localVideoEnabled} // Pass local toggle state
+                  stream={spotlightStream}
+                  isLocal={spotlightIsLocal}
+                  name={spotlightName}
+                  isScreenSharing
+                  objectFit={fitMode}
+                  isVideoEnabled={spotlightIsLocal ? localVideoEnabled : (sharingParticipant?.hasVideo ?? true)}
+                  hasAudio={spotlightIsLocal ? !meetingState.isAudioMuted : (sharingParticipant?.hasAudio ?? true)}
+                  className="w-full h-full max-w-full max-h-full"
                 />
+              </div>
 
-                {/* Remote Participants */}
-                {meetingState.participants
-                    .filter(p => isHost ? p.role !== 'host' : p.id !== manager.getPeerId())
-                    .map(p => (
+              {/* Collapsible filmstrip */}
+              {showFilmstrip && (filmstripRemote.length > 0 || showLocalInFilmstrip) && (
+                <div className="shrink-0 flex gap-2 px-2 py-2 overflow-x-auto bg-black/40 border-t border-white/5">
+                  {showLocalInFilmstrip && (
+                    <VideoPlayer
+                      stream={manager.getLocalStream()}
+                      isLocal
+                      name={localName}
+                      isVideoEnabled={localVideoEnabled}
+                      className="w-36 sm:w-44 aspect-video shrink-0"
+                    />
+                  )}
+                  {filmstripRemote.map(p => (
+                    <VideoPlayer
+                      key={p.id}
+                      stream={p.stream || null}
+                      name={p.name}
+                      hasAudio={p.hasAudio}
+                      isVideoEnabled={p.hasVideo}
+                      className="w-36 sm:w-44 aspect-video shrink-0"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* --- Grid view --- */
+            <div className={`flex-1 overflow-y-auto p-2 sm:p-4 transition-all duration-300 relative ${showChat ? 'mr-0 sm:mr-80' : ''}`}>
+              {/* Switch-to-spotlight button (shown when a share exists in grid mode) */}
+              {hasShare && (
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
+                  <button
+                    onClick={() => setViewMode('spotlight')}
+                    className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-xs font-medium hover:bg-black/80 transition-colors border border-white/10"
+                    title={t("room.spotlightView")}
+                  >
+                    <Monitor className="w-3.5 h-3.5" /> {t("room.spotlightView")}
+                  </button>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4 auto-rows-fr max-w-7xl mx-auto min-h-full content-start">
+                 {/* Local User */}
+                 <VideoPlayer
+                   stream={manager.getLocalStream()}
+                   isLocal={true}
+                   name={localName}
+                   className={`${localSharing ? 'col-span-1 sm:col-span-2 row-span-2 aspect-auto' : 'aspect-video'}`}
+                   isScreenSharing={localSharing}
+                   objectFit={fitMode}
+                   isVideoEnabled={localVideoEnabled}
+                 />
+
+                 {/* Remote Participants */}
+                 {displayedParticipants.map(p => (
                     <ParticipantVideo key={p.id} participant={p} />
-                ))}
+                 ))}
 
-                {/* Empty State */}
-                {meetingState.participants.length <= 1 && (
+                 {/* Empty State */}
+                 {meetingState.participants.length <= 1 && (
                     <div className="flex flex-col items-center justify-center text-white/30 bg-white/5 rounded-xl border border-white/5 aspect-video p-4 text-center border-dashed">
                         <p className="text-sm">{t("room.waitingForOthers")}</p>
                         <Button variant="link" className="text-blue-400 text-xs h-auto p-0" onClick={() => setShowQR(true)}>{t("room.invitePeople")}</Button>
                     </div>
-                )}
-             </div>
-          </div>
+                 )}
+              </div>
+            </div>
+          )}
 
           {/* Chat Sidebar */}
           <div className={`fixed inset-y-0 right-0 w-full sm:w-80 bg-gray-900 border-l border-gray-800 transform transition-transform duration-300 z-40 flex flex-col ${showChat ? 'translate-x-0' : 'translate-x-full'}`}>
