@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       roomId: room.id
     })
   } catch (error) {
-    console.error('create room failed:', error instanceof Error ? `${error.message}\n${error.stack}` : String(error))
+    console.error('Failed to create room:', error instanceof Error ? error.message : String(error))
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 })
   }
 }
